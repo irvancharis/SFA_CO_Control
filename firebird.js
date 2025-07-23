@@ -2,9 +2,9 @@
 const Firebird = require('node-firebird');
 
 const options = {
-  host:     '127.0.0.1',
+  host:     '192.168.3.252',
   port:     3051,
-  database: 'C:\\superapps.FDB',  // path langsung ke drive C
+  database: 'c://sfa/sfabsa3w2025.fdb',
   user:     'SYSDBA',
   password: 'masterkey',
   role:     null,
