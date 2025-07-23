@@ -71,6 +71,35 @@ app.post('/login', (req, res) => {
   });
   
 
+  //MASTER_VISIT
+  app.get('/VISIT', (req, res) => {
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return res.status(401).json({ error: 'Token tidak ditemukan' });
+  }
+  const token = authHeader.split(' ')[1];
+  try {
+    jwt.verify(token, process.env.JWT_SECRET);
+  } catch (_) {
+    return res.status(401).json({ error: 'Token tidak valid' });
+  }
+
+  pool.get((err, db) => {
+    if (err) {
+      console.error('Firebird connection error:', err);
+      return res.status(500).json({ error: 'Database connection gagal' });
+    }
+
+    db.query("SELECT * FROM BSA_VISITCOMPONENT", (err, result) => {
+      db.detach();
+      if (err) {
+        console.error('Query error:', err);
+        return res.status(500).json({ error: 'Query gagal' });
+      }
+      res.json(result);
+    });
+  });
+});
 
 // Contoh GET /users (butuh token di header Authorization: Bearer <token>)
 app.get('/users', (req, res) => {
