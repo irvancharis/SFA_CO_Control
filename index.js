@@ -26,7 +26,7 @@ app.post('/login', (req, res) => {
     const { username, password } = req.body;
   
     if (!username || !password) {
-      return res.status(400).json({ error: 'Username dan password wajib diisi' });
+      return res.status(400).json({ error: 'Username dan password wajib diisi' });//asek asek jos
     }
   
     pool.get((err, db) => {
