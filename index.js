@@ -37,7 +37,7 @@ app.post('/login', (req, res) => {
   
       const sql = `
         SELECT USERNAME, PASSWORD_SFA, FLAGSALES
-        FROM SFA_USER
+        FROM VIEW_SFA_LOGIN
         WHERE USERNAME = ? AND PASSWORD_SFA = ?
       `;
   
