@@ -1,0 +1,5 @@
+{
+    "avdmanager.sdkPath": "c:\\sdk",
+    "avdmanager.executable": "c:\\Users\\sirahc\\AppData\\Local\\Android\\Sdk\\emulator\\emulator.exe",
+    "avdmanager.sdkManager": "c:\\adb\\adb.exe"
+}
