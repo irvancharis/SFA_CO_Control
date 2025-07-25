@@ -181,17 +181,17 @@ app.get("/JOINTCALL", (req, res) => {
 //SEARCHING DATA MASTER KUNJUNGAN UNTUK JOINT_CALL
 app.get("/CONTROLCALL", (req, res) => {
   //UNTuK TEST NONAKTIFKAN INI UNTUK MENGHINDARI TOKEN VALIDATION
-  const authHeader = req.headers.authorization;
-  if (!authHeader || !authHeader.startsWith("Bearer ")) {
-    return res.status(401).json({ error: "Token tidak ditemukan" });
-  }
+  // const authHeader = req.headers.authorization;
+  // if (!authHeader || !authHeader.startsWith("Bearer ")) {
+  //   return res.status(401).json({ error: "Token tidak ditemukan" });
+  // }
 
-  const token = authHeader.split(" ")[1];
-  try {
-    jwt.verify(token, process.env.JWT_SECRET);
-  } catch (_) {
-    return res.status(401).json({ error: "Token tidak valid" });
-  }
+  // const token = authHeader.split(" ")[1];
+  // try {
+  //   jwt.verify(token, process.env.JWT_SECRET);
+  // } catch (_) {
+  //   return res.status(401).json({ error: "Token tidak valid" });
+  // }
   //UNTuK TEST NONAKTIFKAN INI UNTUK MENGHINDARI TOKEN VALIDATION
 
   // Ambil parameter dari query string
