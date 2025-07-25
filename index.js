@@ -167,7 +167,6 @@ app.get("/JOINTCALL", (req, res) => {
 
 //SEARCHING DATA MASTER KUNJUNGAN UNTUK JOINT_CALL
 app.get("/CONTROLCALL", (req, res) => {
-  
 
   // Ambil parameter dari query string
   const { KODECABANG, IDSALES, TANGGAL } = req.body;
