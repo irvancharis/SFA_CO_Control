@@ -25,7 +25,7 @@ app.post("/login", (req, res) => {
   const { username, password } = req.body;
 
   if (!username || !password) {
-    return res.status(400).json({ error: "Username dan password wajib diisi" }); //asek asek jos
+    return res.status(400).json({ error: "Username dan password wajib diisi" }); 
   }
 
   pool.get((err, db) => {
@@ -69,8 +69,7 @@ app.post("/login", (req, res) => {
   });
 });
 
-//MASTER_VISIT_JOIN
-app.get("/VISIT_JOIN", (req, res) => {
+app.get("/FEATURE", (req, res) => {
   
   pool.get((err, db) => {
     if (err) {
@@ -78,7 +77,7 @@ app.get("/VISIT_JOIN", (req, res) => {
       return res.status(500).json({ error: "Database connection gagal" });
     }
 
-    db.query("SELECT * FROM BSA_VISITCOMPONENT WHERE JENIS_KUNJUNGAN = 0", (err, result) => {
+    db.query("SELECT * FROM BSA_FEATURE WHERE IS_ACTIVE = 1", (err, result) => {
       db.detach();
       if (err) {
         console.error("Query error:", err);
@@ -90,25 +89,52 @@ app.get("/VISIT_JOIN", (req, res) => {
 });
 
 
-//MASTER_VISIT_CONTROL
-app.get("/VISIT_CONTROL", (req, res) => {
-  
-    pool.get((err, db) => {
-      if (err) {
-        console.error("Firebird connection error:", err);
-        return res.status(500).json({ error: "Database connection gagal" });
-      }
-  
-      db.query("SELECT * FROM BSA_VISITCOMPONENT WHERE JENIS_KUNJUNGAN = 1", (err, result) => {
+app.get("/DETAIL_FEATURE/:id", (req, res) => {  
+  pool.get((err, db) => {
+    if (err) {
+      console.error("Firebird connection error:", err);
+      return res.status(500).json({ error: "Database connection gagal" });
+    }
+
+    db.query(
+      "SELECT * FROM BSA_FEATUREDETAIL WHERE IS_ACTIVE = 1 AND ID_FEATURE = ?",
+      [req.params.id],
+      (err, result) => {
         db.detach();
         if (err) {
           console.error("Query error:", err);
           return res.status(500).json({ error: "Query gagal" });
         }
         res.json(result);
-      });
-    });
+      }
+    );
+    
   });
+});
+
+app.get("/SUB_DETAIL_FEATURE/:id", (req, res) => {  
+  pool.get((err, db) => {
+    if (err) {
+      console.error("Firebird connection error:", err);
+      return res.status(500).json({ error: "Database connection gagal" });
+    }
+
+    db.query(
+      "SELECT * FROM BSA_FEATURESUBDETAIL WHERE IS_ACTIVE = 1 AND ID_FEATUREDETAIL = ?",
+      [req.params.id],
+      (err, result) => {
+        db.detach();
+        if (err) {
+          console.error("Query error:", err);
+          return res.status(500).json({ error: "Query gagal" });
+        }
+        res.json(result);
+      }
+    );
+    
+  });
+});
+
 
 //MASTER_DATASALES
 app.get("/DATASALES", (req, res) => {
@@ -133,70 +159,7 @@ app.get("/DATASALES", (req, res) => {
   });
 });
 
-//SEARCHING DATA MASTER KUNJUNGAN UNTUK JOINT_CALL
-app.get("/JOINTCALL", (req, res) => {
-  
-  const { KODECABANG, IDSALES, TANGGAL } = req.body;
 
-  if (!KODECABANG || !IDSALES || !TANGGAL) {
-    return res
-      .status(400)
-      .json({ error: "KODECABANG, IDSALES, dan TANGGAL wajib diisi" });
-  }
-
-  const NOCALL = `W${KODECABANG}_${IDSALES}_${TANGGAL}`;
-
-  pool.get((err, db) => {
-    if (err) {
-      console.error("Firebird connection error:", err);
-      return res.status(500).json({ error: "Database connection gagal" });
-    }
-
-    const sql = `SELECT * FROM VIEW_GET_BSA_CALLDETAIL WHERE NOCALL = ? ORDER BY NODETAIL ASC;`;
-
-    db.query(sql, [NOCALL], (err, result) => {
-      db.detach();
-      if (err) {
-        console.error("Query error:", err);
-        return res.status(500).json({ error: "Query gagal" });
-      }
-      res.json(result);
-    });
-  });
-});
-
-//SEARCHING DATA MASTER KUNJUNGAN UNTUK JOINT_CALL
-app.get("/CONTROLCALL", (req, res) => {
-
-  // Ambil parameter dari query string
-  const { KODECABANG, IDSALES, TANGGAL } = req.body;
-
-  if (!KODECABANG || !IDSALES || !TANGGAL) {
-    return res
-      .status(400)
-      .json({ error: "KODECABANG, IDSALES, dan TANGGAL wajib diisi" });
-  }
-
-  const NOCALL = `W${KODECABANG}_${IDSALES}_${TANGGAL}`;
-
-  pool.get((err, db) => {
-    if (err) {
-      console.error("Firebird connection error:", err);
-      return res.status(500).json({ error: "Database connection gagal" });
-    }
-
-    const sql = `SELECT * FROM VIEW_GET_SFA_CALLDETAIL WHERE NOCALL = ? ORDER BY NODETAIL ASC;`;
-
-    db.query(sql, [NOCALL], (err, result) => {
-      db.detach();
-      if (err) {
-        console.error("Query error:", err);
-        return res.status(500).json({ error: "Query gagal" });
-      }
-      res.json(result);
-    });
-  });
-});
 
 // Contoh GET /users (butuh token di header Authorization: Bearer <token>)
 app.get("/users", (req, res) => {
