@@ -1,12 +1,13 @@
 require("dotenv").config();
 const express = require("express");
-const pool = require("./firebird");
+const bodyParser = require("body-parser");
+const { pool, Firebird, NOOP } = require("./firebird"); // pastikan ini betul
 const jwt = require("jsonwebtoken");
 
 const app = express();
 const PORT = 3000;
 
-app.use(express.json());
+app.use(bodyParser.json());
 
 // Helper: buat JWT
 function createToken(payload) {
@@ -224,6 +225,116 @@ app.post('/SUBMIT_CHECKLIST', express.json(), (req, res) => {
 
   return res.json({ success: true });
 });
+
+
+app.post("/SUBMIT_VISIT", async (req, res) => {
+  const {
+    id_visit,
+    tanggal,
+    idspv,
+    idpelanggan,
+    latitude,
+    longitude,
+    mulai,
+    selesai,
+    catatan,
+    details,
+    id_feature,
+  } = req.body;
+
+  if (
+    !id_visit || !tanggal || !idspv || !idpelanggan ||
+    !mulai || !selesai || !Array.isArray(details)
+  ) {
+    return res.status(400).json({ error: "Data tidak lengkap" });
+  }
+
+  pool.get(async (err, db) => {
+    if (err) {
+      console.error("❌ Koneksi DB gagal:", err);
+      return res.status(500).json({ error: "Koneksi database gagal" });
+    }
+
+    const insertVisit = `
+      INSERT INTO SFA_VISIT 
+        (ID_VISIT, TANGGAL, IDSPV, IDPELANGGAN, LATITUDE, LONGITUDE, MULAI, SELESAI, CATATAN)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `;
+
+    const insertDetail = `
+      INSERT INTO SFA_VISITDET 
+        (ID_VISIT, ID_FEATURE, ID_FEATUREDETAIL, ID_FEATURESUBDETAIL, CHECKLIST)
+      VALUES (?, ?, ?, ?, ?)
+    `;
+
+    db.transaction(Firebird.ISOLATION_READ_COMMITTED, async (err, tx) => {
+      if (err) {
+        console.error("❌ Gagal mulai transaksi:", err);
+        db.detach();
+        return res.status(500).json({ error: "Transaksi gagal dimulai" });
+      }
+
+      try {
+        // Insert visit utama
+        await queryAsync(tx, insertVisit, [
+          id_visit,
+          new Date(tanggal),
+          idspv,
+          idpelanggan,
+          latitude,
+          longitude,
+          new Date(mulai),
+          new Date(selesai),
+          catatan,
+        ]);
+
+        // Insert detail checklist
+        for (const detail of details) {
+          const id_featuredetail = detail.id;
+          const subDetails = detail.subDetails || [];
+
+          for (const sub of subDetails) {
+            const checklist = sub.isChecked ? 1 : 0;
+            await queryAsync(tx, insertDetail, [
+              id_visit,
+              id_feature,
+              id_featuredetail,
+              sub.id,
+              checklist,
+            ]);
+          }
+        }
+
+        tx.commit((commitErr) => {
+          db.detach();
+          if (commitErr) {
+            console.error("❌ Commit gagal:", commitErr);
+            return res.status(500).json({ error: "Gagal menyimpan ke database" });
+          }
+          return res.json({ success: true, message: "Checklist berhasil disimpan" });
+        });
+      } catch (e) {
+        console.error("❌ Exception dalam transaksi:", e);
+        tx.rollback(() => {
+          db.detach();
+          res.status(500).json({ error: "Gagal menyimpan checklist" });
+        });
+      }
+    });
+  });
+});
+
+// Helper untuk promisify query Firebird
+function queryAsync(tx, sql, params) {
+  return new Promise((resolve, reject) => {
+    tx.query(sql, params, (err) => {
+      if (err) reject(err);
+      else resolve();
+    });
+  });
+}
+
+
 
 
 
