@@ -341,21 +341,28 @@ app.get("/JOINT_CALL_DETAIL/:nocall", (req, res) => {
 
     const query = `
       SELECT 
-        a.NOCALL, 
-        a.NODETAIL, 
-        a.IDPELANGGAN, 
-        b.NAMAPELANGGAN, 
-        b.ALAMAT, 
-        b.KECAMATAN, 
-        b.KOTAKABUPATEN, 
-        b.LATITUDE, 
-        b.LONGITUDE, 
-        b.TIPE AS TIPEPELANGGAN, 
-        b.TOP AS TIPEPEMBAYARAN 
-      FROM BSA_CALLDETAIL a 
-      INNER JOIN BSA_PELANGGAN b ON a.IDPELANGGAN = b.BARCODE 
-      WHERE a.NOCALL = ?
-      ORDER BY a.NODETAIL ASC
+  a.NOCALL, 
+  a.NODETAIL, 
+  a.IDPELANGGAN, 
+  b.NAMAPELANGGAN, 
+  b.ALAMAT, 
+  b.KECAMATAN, 
+  b.KOTAKABUPATEN, 
+  b.LATITUDE, 
+  b.LONGITUDE, 
+  b.TIPE as TIPEPELANGGAN, 
+  b.TOP as TIPEPEMBAYARAN
+FROM BSA_CALLDETAIL a
+INNER JOIN BSA_PELANGGAN b ON a.IDPELANGGAN = b.BARCODE
+WHERE a.NODETAIL = (
+  SELECT MIN(a2.NODETAIL)
+  FROM BSA_CALLDETAIL a2
+  WHERE a2.IDPELANGGAN = a.IDPELANGGAN
+    AND a2.NOCALL = ?
+)
+AND a.NOCALL = ?
+ORDER BY a.NODETAIL ASC
+
     `;
 
     db.query(query, [nocall], (err, result) => {
