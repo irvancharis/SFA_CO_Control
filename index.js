@@ -365,7 +365,7 @@ ORDER BY a.NODETAIL ASC
 
     `;
 
-    db.query(query, [nocall], (err, result) => {
+    db.query(query, [nocall, nocall], (err, result) => {
       db.detach(); // Penting: selalu detach setelah query
 
       if (err) {
@@ -416,7 +416,7 @@ ORDER BY a.NODETAIL ASC;
 
     `;
 
-    db.query(query, [nocall], (err, result) => {
+    db.query(query, [nocall, nocall], (err, result) => {
       db.detach(); // Penting: selalu detach setelah query
 
       if (err) {
