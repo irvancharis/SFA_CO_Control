@@ -324,19 +324,47 @@ app.post("/SUBMIT_VISIT", async (req, res) => {
   });
 });
 
-// Helper untuk promisify query Firebird
-function queryAsync(tx, sql, params) {
-  return new Promise((resolve, reject) => {
-    tx.query(sql, params, (err) => {
-      if (err) reject(err);
-      else resolve();
+// GET /JOINT_CALL_DETAIL
+app.get("/JOINT_CALL_DETAIL", (req, res) => {
+  const authHeader = req.headers.authorization;
+
+  pool.get((err, db) => {
+    if (err) {
+      console.error("Firebird connection error:", err);
+      return res.status(500).json({ error: "Database connection gagal" });
+    }
+
+    const query = `
+      SELECT 
+        a.NOCALL, 
+        a.NODETAIL, 
+        a.IDPELANGGAN, 
+        b.NAMAPELANGGAN, 
+        b.ALAMAT, 
+        b.KECAMATAN, 
+        b.KOTAKABUPATEN, 
+        b.LATITUDE, 
+        b.LONGITUDE, 
+        b.TIPE as TIPEPELANGGAN, 
+        b.TOP as TIPEPEMBAYARAN 
+      FROM BSA_CALLDETAIL a 
+      INNER JOIN BSA_PELANGGAN b ON a.IDPELANGGAN = b.BARCODE 
+      WHERE a.NOCALL = 'W1_61_20250103' 
+      ORDER BY a.NODETAIL ASC
+    `;
+
+    db.query(query, (err, result) => {
+      db.detach();
+
+      if (err) {
+        console.error("Query error:", err);
+        return res.status(500).json({ error: "Query gagal" });
+      }
+
+      res.json(result);
     });
   });
-}
-
-
-
-
+});
 
 //MASTER_DATASALES
 app.get("/DATASALES", (req, res) => {
@@ -361,8 +389,6 @@ app.get("/DATASALES", (req, res) => {
   });
 });
 
-
-
 // Contoh GET /users (butuh token di header Authorization: Bearer <token>)
 app.get("/users", (req, res) => {
   const authHeader = req.headers.authorization;
@@ -383,6 +409,16 @@ app.get("/users", (req, res) => {
     });
   });
 });
+
+// Helper untuk promisify query Firebird
+function queryAsync(tx, sql, params) {
+  return new Promise((resolve, reject) => {
+    tx.query(sql, params, (err) => {
+      if (err) reject(err);
+      else resolve();
+    });
+  });
+}
 
 // Mulai server
 app.listen(PORT, () => {
