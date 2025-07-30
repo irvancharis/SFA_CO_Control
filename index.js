@@ -325,13 +325,18 @@ app.post("/SUBMIT_VISIT", async (req, res) => {
 });
 
 // GET /JOINT_CALL_DETAIL
-app.get("/JOINT_CALL_DETAIL", (req, res) => {
+app.get("/JOINT_CALL_DETAIL/:nocall", (req, res) => {
   const authHeader = req.headers.authorization;
+  const nocall = req.params.nocall; // Ambil dari URL
+
+  if (!nocall) {
+    return res.status(400).json({ error: "Parameter 'nocall' wajib diisi di URL." });
+  }
 
   pool.get((err, db) => {
     if (err) {
       console.error("Firebird connection error:", err);
-      return res.status(500).json({ error: "Database connection gagal" });
+      return res.status(500).json({ error: "Koneksi ke database gagal." });
     }
 
     const query = `
@@ -345,20 +350,20 @@ app.get("/JOINT_CALL_DETAIL", (req, res) => {
         b.KOTAKABUPATEN, 
         b.LATITUDE, 
         b.LONGITUDE, 
-        b.TIPE as TIPEPELANGGAN, 
-        b.TOP as TIPEPEMBAYARAN 
+        b.TIPE AS TIPEPELANGGAN, 
+        b.TOP AS TIPEPEMBAYARAN 
       FROM BSA_CALLDETAIL a 
       INNER JOIN BSA_PELANGGAN b ON a.IDPELANGGAN = b.BARCODE 
-      WHERE a.NOCALL = 'W1_61_20250103' 
+      WHERE a.NOCALL = ?
       ORDER BY a.NODETAIL ASC
     `;
 
-    db.query(query, (err, result) => {
-      db.detach();
+    db.query(query, [nocall], (err, result) => {
+      db.detach(); // Penting: selalu detach setelah query
 
       if (err) {
         console.error("Query error:", err);
-        return res.status(500).json({ error: "Query gagal" });
+        return res.status(500).json({ error: "Gagal menjalankan query." });
       }
 
       res.json(result);
