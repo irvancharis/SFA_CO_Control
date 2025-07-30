@@ -378,6 +378,57 @@ ORDER BY a.NODETAIL ASC
   });
 });
 
+// GET /CONTROL_CALL_DETAIL
+app.get("/CONTROL_CALL_DETAIL/:nocall", (req, res) => {
+  const authHeader = req.headers.authorization;
+  const nocall = req.params.nocall; // Ambil dari URL
+
+  if (!nocall) {
+    return res.status(400).json({ error: "Parameter 'nocall' wajib diisi di URL." });
+  }
+
+  pool.get((err, db) => {
+    if (err) {
+      console.error("Firebird connection error:", err);
+      return res.status(500).json({ error: "Koneksi ke database gagal." });
+    }
+
+    const query = `
+      SELECT 
+  a.NOCALL, 
+  a.NODETAIL, 
+  a.IDPELANGGAN, 
+  b.ALAMAT, 
+  b.KECAMATAN, 
+  b.KOTAKABUPATEN, 
+  a.LATITUDE, 
+  a.LONGITUDE
+FROM SFA_CALLDETAIL a
+INNER JOIN SFA_PELANGGAN b ON a.IDPELANGGAN = b.ID
+WHERE a.NODETAIL = (
+  SELECT MIN(a2.NODETAIL)
+  FROM SFA_CALLDETAIL a2
+  WHERE a2.IDPELANGGAN = a.IDPELANGGAN
+    AND a2.NOCALL = ?
+)
+AND a.NOCALL = ?
+ORDER BY a.NODETAIL ASC;
+
+    `;
+
+    db.query(query, [nocall], (err, result) => {
+      db.detach(); // Penting: selalu detach setelah query
+
+      if (err) {
+        console.error("Query error:", err);
+        return res.status(500).json({ error: "Gagal menjalankan query." });
+      }
+
+      res.json(result);
+    });
+  });
+});
+
 //MASTER_DATASALES
 app.get("/DATASALES", (req, res) => {
   
