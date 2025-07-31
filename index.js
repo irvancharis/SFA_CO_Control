@@ -3,9 +3,26 @@ const express = require("express");
 const bodyParser = require("body-parser");
 const { pool, Firebird, NOOP } = require("./firebird"); // pastikan ini betul
 const jwt = require("jsonwebtoken");
+const multer = require('multer');
+const path = require('path');
 
 const app = express();
 const PORT = 3000;
+
+
+const storage = multer.diskStorage({
+  destination: function (req, file, cb) {
+    cb(null, path.join(__dirname, 'uploads')); // Folder 'uploads' di root project
+  },
+  filename: function (req, file, cb) {
+    // Optional: Ganti nama file jika ingin
+    cb(null, file.originalname);
+  }
+});
+const upload = multer({ storage: storage });
+
+
+
 
 app.use(bodyParser.json());
 
@@ -90,28 +107,45 @@ app.get("/FEATURE", (req, res) => {
 });
 
 
-app.get("/DETAIL_FEATURE/:id", (req, res) => {  
+app.get("/DETAIL_FEATURE", (req, res) => {
+  
   pool.get((err, db) => {
     if (err) {
       console.error("Firebird connection error:", err);
       return res.status(500).json({ error: "Database connection gagal" });
     }
 
-    db.query(
-      "SELECT * FROM BSA_FEATUREDETAIL WHERE IS_ACTIVE = 1 AND ID_FEATURE = ?",
-      [req.params.id],
-      (err, result) => {
-        db.detach();
-        if (err) {
-          console.error("Query error:", err);
-          return res.status(500).json({ error: "Query gagal" });
-        }
-        res.json(result);
+    db.query("SELECT * FROM BSA_FEATUREDETAIL WHERE IS_ACTIVE = 1", (err, result) => {
+      db.detach();
+      if (err) {
+        console.error("Query error:", err);
+        return res.status(500).json({ error: "Query gagal" });
       }
-    );
-    
+      res.json(result);
+    });
   });
 });
+
+
+app.get("/SUBDETAIL_FEATURE", (req, res) => {
+  
+  pool.get((err, db) => {
+    if (err) {
+      console.error("Firebird connection error:", err);
+      return res.status(500).json({ error: "Database connection gagal" });
+    }
+
+    db.query("SELECT * FROM BSA_FEATURESUBDETAIL WHERE IS_ACTIVE = 1", (err, result) => {
+      db.detach();
+      if (err) {
+        console.error("Query error:", err);
+        return res.status(500).json({ error: "Query gagal" });
+      }
+      res.json(result);
+    });
+  });
+});
+
 
 app.get("/DETAIL_WITH_SUB/:id", (req, res) => {
   const featureId = req.params.id;
@@ -240,11 +274,14 @@ app.post("/SUBMIT_VISIT", async (req, res) => {
     catatan,
     details,
     id_feature,
+    id_sales, // field dari Flutter
+    nocall,
   } = req.body;
 
+  // Validasi data wajib
   if (
     !id_visit || !tanggal || !idspv || !idpelanggan ||
-    !mulai || !selesai || !Array.isArray(details)
+    !mulai || !selesai || !Array.isArray(details) || !id_sales || !nocall
   ) {
     return res.status(400).json({ error: "Data tidak lengkap" });
   }
@@ -257,8 +294,8 @@ app.post("/SUBMIT_VISIT", async (req, res) => {
 
     const insertVisit = `
       INSERT INTO SFA_VISIT 
-        (ID_VISIT, TANGGAL, IDSPV, IDPELANGGAN, LATITUDE, LONGITUDE, MULAI, SELESAI, CATATAN)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        (ID_VISIT, TANGGAL, IDSPV, IDPELANGGAN, LATITUDE, LONGITUDE, MULAI, SELESAI, CATATAN, IDSALES, NOCALL)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `;
 
     const insertDetail = `
@@ -275,7 +312,7 @@ app.post("/SUBMIT_VISIT", async (req, res) => {
       }
 
       try {
-        // Insert visit utama
+        // Insert visit utama (dengan id_sales & nocall)
         await queryAsync(tx, insertVisit, [
           id_visit,
           new Date(tanggal),
@@ -286,6 +323,8 @@ app.post("/SUBMIT_VISIT", async (req, res) => {
           new Date(mulai),
           new Date(selesai),
           catatan,
+          id_sales,
+          nocall
         ]);
 
         // Insert detail checklist
@@ -323,6 +362,7 @@ app.post("/SUBMIT_VISIT", async (req, res) => {
     });
   });
 });
+
 
 // GET /JOINT_CALL_DETAIL
 app.get("/JOINT_CALL_DETAIL/:nocall", (req, res) => {
@@ -439,7 +479,7 @@ app.get("/DATASALES", (req, res) => {
     }
 
     db.query(
-      "SELECT IDSALES,IDCABANG,SUSPEND,FLAG_KUNJUNGAN, NAMASALES,IDSPV FROM BSA_KARYAWAN",
+      "SELECT IDSALES,IDCABANG,SUSPEND,FLAG_KUNJUNGAN, NAMASALES, NAMAKARYAWAN as KODESALES ,IDSPV FROM BSA_KARYAWAN",
       (err, result) => {
         db.detach();
         if (err) {
@@ -451,6 +491,14 @@ app.get("/DATASALES", (req, res) => {
     );
   });
 });
+
+// Misal pakai express-fileupload atau multer
+app.post('/upload-db', upload.single('file'), (req, res) => {
+  if (!req.file) return res.status(400).json({ error: "No file uploaded" });
+  res.json({ status: 'success', filename: req.file.originalname });
+});
+
+
 
 // Contoh GET /users (butuh token di header Authorization: Bearer <token>)
 app.get("/users", (req, res) => {
