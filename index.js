@@ -261,108 +261,6 @@ app.post('/SUBMIT_CHECKLIST', express.json(), (req, res) => {
 });
 
 
-app.post("/SUBMIT_VISIT", async (req, res) => {
-  const {
-    id_visit,
-    tanggal,
-    idspv,
-    idpelanggan,
-    latitude,
-    longitude,
-    mulai,
-    selesai,
-    catatan,
-    details,
-    id_feature,
-    id_sales, // field dari Flutter
-    nocall,
-  } = req.body;
-
-  // Validasi data wajib
-  if (
-    !id_visit || !tanggal || !idspv || !idpelanggan ||
-    !mulai || !selesai || !Array.isArray(details) || !id_sales || !nocall
-  ) {
-    return res.status(400).json({ error: "Data tidak lengkap" });
-  }
-
-  pool.get(async (err, db) => {
-    if (err) {
-      console.error("❌ Koneksi DB gagal:", err);
-      return res.status(500).json({ error: "Koneksi database gagal" });
-    }
-
-    const insertVisit = `
-      INSERT INTO SFA_VISIT 
-        (ID_VISIT, TANGGAL, IDSPV, IDPELANGGAN, LATITUDE, LONGITUDE, MULAI, SELESAI, CATATAN, IDSALES, NOCALL)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `;
-
-    const insertDetail = `
-      INSERT INTO SFA_VISITDET 
-        (ID_VISIT, ID_FEATURE, ID_FEATUREDETAIL, ID_FEATURESUBDETAIL, CHECKLIST)
-      VALUES (?, ?, ?, ?, ?)
-    `;
-
-    db.transaction(Firebird.ISOLATION_READ_COMMITTED, async (err, tx) => {
-      if (err) {
-        console.error("❌ Gagal mulai transaksi:", err);
-        db.detach();
-        return res.status(500).json({ error: "Transaksi gagal dimulai" });
-      }
-
-      try {
-        // Insert visit utama (dengan id_sales & nocall)
-        await queryAsync(tx, insertVisit, [
-          id_visit,
-          new Date(tanggal),
-          idspv,
-          idpelanggan,
-          latitude,
-          longitude,
-          new Date(mulai),
-          new Date(selesai),
-          catatan,
-          id_sales,
-          nocall
-        ]);
-
-        // Insert detail checklist
-        for (const detail of details) {
-          const id_featuredetail = detail.id;
-          const subDetails = detail.subDetails || [];
-
-          for (const sub of subDetails) {
-            const checklist = sub.isChecked ? 1 : 0;
-            await queryAsync(tx, insertDetail, [
-              id_visit,
-              id_feature,
-              id_featuredetail,
-              sub.id,
-              checklist,
-            ]);
-          }
-        }
-
-        tx.commit((commitErr) => {
-          db.detach();
-          if (commitErr) {
-            console.error("❌ Commit gagal:", commitErr);
-            return res.status(500).json({ error: "Gagal menyimpan ke database" });
-          }
-          return res.json({ success: true, message: "Checklist berhasil disimpan" });
-        });
-      } catch (e) {
-        console.error("❌ Exception dalam transaksi:", e);
-        tx.rollback(() => {
-          db.detach();
-          res.status(500).json({ error: "Gagal menyimpan checklist" });
-        });
-      }
-    });
-  });
-});
-
 
 // GET /JOINT_CALL_DETAIL
 app.get("/JOINT_CALL_DETAIL/:nocall", (req, res) => {
@@ -497,6 +395,147 @@ app.post('/upload-db', upload.single('file'), (req, res) => {
   if (!req.file) return res.status(400).json({ error: "No file uploaded" });
   res.json({ status: 'success', filename: req.file.originalname });
 });
+
+
+
+app.post("/SUBMIT_VISIT", (req, res) => {
+  const {
+    id_visit,
+    tanggal,
+    id_spv,
+    id_pelanggan,
+    latitude,
+    longitude,
+    mulai,
+    selesai,
+    catatan,
+    details,
+    id_feature,
+    id_sales,
+    nocall,
+  } = req.body;
+
+  // 🟡 Cetak semua data yang dikirim dari Flutter
+  console.log("\n📥 DATA DITERIMA DARI FLUTTER:");
+  console.log({
+    id_visit,
+    tanggal,
+    id_spv,
+    id_pelanggan,
+    latitude,
+    longitude,
+    mulai,
+    selesai,
+    catatan,
+    id_feature,
+    id_sales,
+    nocall,
+    checklistCount: Array.isArray(details) ? details.length : 'invalid',
+  });
+
+  // 🛑 Validasi
+  if (
+    !id_visit || !tanggal || !id_spv || !id_pelanggan ||
+    !mulai || !selesai || !id_sales || !nocall
+  ) {
+    console.warn("❌ VALIDASI GAGAL. Data yang tidak lengkap:");
+    if (!id_visit) console.warn(" - id_visit kosong/null");
+    if (!tanggal) console.warn(" - tanggal kosong/null");
+    if (!id_spv) console.warn(" - idspv kosong/null");
+    if (!id_pelanggan) console.warn(" - idpelanggan kosong/null");
+    if (!mulai) console.warn(" - mulai kosong/null");
+    if (!selesai) console.warn(" - selesai kosong/null");
+    if (!id_sales) console.warn(" - id_sales kosong/null");
+    if (!nocall) console.warn(" - nocall kosong/null");
+    if (!Array.isArray(details)) console.warn(" - details bukan array");
+
+    return res.status(400).json({ error: "Data tidak lengkap" });
+  }
+
+  // ✅ Lanjut insert ke DB...
+  pool.get((err, db) => {
+    if (err) {
+      console.error("❌ Koneksi DB gagal:", err);
+      return res.status(500).json({ error: "Koneksi database gagal" });
+    }
+
+    db.transaction(Firebird.ISOLATION_READ_COMMITTED, async (err, tx) => {
+      if (err) {
+        console.error("❌ Gagal mulai transaksi:", err);
+        db.detach();
+        return res.status(500).json({ error: "Transaksi gagal dimulai" });
+      }
+
+      try {
+        // Log ringkasan insert visit
+        console.log(`🚀 Menyimpan VISIT: ${id_visit}`);
+
+        const insertVisit = `
+          INSERT INTO SFA_VISIT 
+          (ID_VISIT, TANGGAL, IDSPV, IDPELANGGAN, LATITUDE, LONGITUDE, MULAI, SELESAI, CATATAN, IDSALES, NOCALL)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `;
+
+        await queryAsync(tx, insertVisit, [
+          id_visit,
+          new Date(tanggal),
+          id_spv,
+          id_pelanggan,
+          latitude,
+          longitude,
+          new Date(mulai),
+          new Date(selesai),
+          catatan,
+          id_sales,
+          nocall
+        ]);
+
+        const insertDetail = `
+          INSERT INTO SFA_VISITDET 
+          (ID_VISIT, ID_FEATURE, ID_FEATUREDETAIL, ID_FEATURESUBDETAIL, CHECKLIST)
+          VALUES (?, ?, ?, ?, ?)
+        `;
+
+        for (const detail of details) {
+          const id_featuredetail = detail.id;
+          const subDetails = detail.subDetails || [];
+
+          console.log(`📌 Detail: ${id_featuredetail} | sub: ${subDetails.length}`);
+
+          for (const sub of subDetails) {
+            const checklist = sub.isChecked ? 1 : 0;
+            console.log(`   ↳ Sub: ${sub.id} | Checked: ${checklist}`);
+
+            await queryAsync(tx, insertDetail, [
+              id_visit,
+              id_feature,
+              id_featuredetail,
+              sub.id,
+              checklist
+            ]);
+          }
+        }
+
+        tx.commit((err) => {
+          db.detach();
+          if (err) {
+            console.error("❌ Gagal commit:", err);
+            return res.status(500).json({ error: "Gagal menyimpan data" });
+          }
+          return res.json({ success: true, message: "Checklist berhasil disimpan" });
+        });
+
+      } catch (e) {
+        console.error("❌ Exception transaksi:", e);
+        tx.rollback(() => {
+          db.detach();
+          return res.status(500).json({ error: "Gagal menyimpan checklist", detail: e.message });
+        });
+      }
+    });
+  });
+});
+
 
 
 
