@@ -335,7 +335,8 @@ app.get("/CONTROL_CALL_DETAIL/:nocall", (req, res) => {
       SELECT 
   a.NOCALL, 
   a.NODETAIL, 
-  a.IDPELANGGAN, 
+  a.IDPELANGGAN,
+  b.NAMAPELANGGAN, 
   b.ALAMAT, 
   b.KECAMATAN, 
   b.KOTAKABUPATEN, 
@@ -497,23 +498,26 @@ app.post("/SUBMIT_VISIT", (req, res) => {
         `;
 
         for (const detail of details) {
-          const id_featuredetail = detail.id;
-          const subDetails = detail.subDetails || [];
+          const id_featuredetail = detail.id_feature_detail;
+          const subDetails = detail.sub_details || [];
 
           console.log(`📌 Detail: ${id_featuredetail} | sub: ${subDetails.length}`);
 
           for (const sub of subDetails) {
-            const checklist = sub.isChecked ? 1 : 0;
-            console.log(`   ↳ Sub: ${sub.id} | Checked: ${checklist}`);
-
+            const checklist = sub.is_checked ? 1 : 0;
+            const id_sub = sub.id_feature_sub_detail;
+          
+            console.log(`   ↳ Sub: ${id_sub} | Checked: ${checklist}`);
+          
             await queryAsync(tx, insertDetail, [
               id_visit,
               id_feature,
               id_featuredetail,
-              sub.id,
+              id_sub,
               checklist
             ]);
           }
+          
         }
 
         tx.commit((err) => {
