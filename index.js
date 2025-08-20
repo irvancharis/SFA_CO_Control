@@ -391,10 +391,73 @@ app.get("/DATASALES", (req, res) => {
   });
 });
 
-// Misal pakai express-fileupload atau multer
+// ================= SELLING HIST =================
+app.get("/HISTSELLING", (req, res) => {
+  pool.get((err, db) => {
+    if (err) {
+      console.error("Firebird connection error:", err);
+      return res.status(500).json({ error: "Database connection gagal" });
+    }
+
+    const sql = `
+      SELECT a.TANGGAL, a.IDSALES, a.NOTRANSAKSI, a.IDPELANGGAN, 
+             x.NAMAPELANGGAN, x.ALAMAT, 
+             b.HARGA, b.IDITEMPRODUK, b.QTY, b.UNIT, 
+             b.QTYCASHBACK, b.JUMLAHCASHBACK, b.QTYPROMO, b.JUMLAHPROMO,
+             'PENJUALAN' AS SOURCE
+      FROM SFA_PENJUALAN a
+      INNER JOIN SFA_PENJUALANDETAIL b ON a.NOTRANSAKSI=b.NOTRANSAKSI
+      INNER JOIN SFA_PELANGGAN x ON a.IDPELANGGAN=x.ID
+      WHERE a.IDSALES='5' AND a.TANGGAL='2025-08-20'
+
+      UNION ALL
+
+      SELECT a.TANGGAL, a.IDSALES, a.NOTRANSAKSI, a.IDPELANGGAN, 
+             x.NAMAPELANGGAN, x.ALAMAT, 
+             b.HARGA, b.IDITEMPRODUK, b.QTY, b.UNIT, 
+             b.QTYCASHBACK, b.JUMLAHCASHBACK, b.QTYPROMO, b.JUMLAHPROMO,
+             'PROMOVENDOR' AS SOURCE
+      FROM SFA_PROMOVENDOR a
+      INNER JOIN SFA_PROMOVENDORDETAIL b ON a.NOTRANSAKSI=b.NOTRANSAKSI
+      INNER JOIN SFA_PELANGGAN x ON a.IDPELANGGAN=x.ID
+      WHERE a.IDSALES='5' AND a.TANGGAL='2025-08-20'
+
+      UNION ALL
+
+      SELECT a.TANGGAL, a.IDSALES, a.NOTRANSAKSI, a.IDPELANGGAN, 
+             x.NAMAPELANGGAN, x.ALAMAT, 
+             b.HARGA, b.IDITEMPRODUK, b.QTY, b.UNIT, 
+             b.QTYCASHBACK, b.JUMLAHCASHBACK, b.QTYPROMO, b.JUMLAHPROMO,
+             'TRANSPROMO' AS SOURCE
+      FROM SFA_TRANSPROMO a
+      INNER JOIN SFA_TRANSPROMODETAIL b ON a.NOTRANSAKSI=b.NOTRANSAKSI
+      INNER JOIN SFA_PELANGGAN x ON a.IDPELANGGAN=x.ID
+      WHERE a.IDSALES='5' AND a.TANGGAL='2025-08-20'
+    `;
+
+    db.query(sql, (err, result) => {
+      db.detach();
+
+      if (err) {
+        console.error("Query error:", err);
+        return res.status(500).json({ error: "Query gagal" });
+      }
+
+      res.json(result);
+    });
+  });
+});
+
+// ================= UPLOAD DB =================
 app.post('/upload-db', upload.single('file'), (req, res) => {
-  if (!req.file) return res.status(400).json({ error: "No file uploaded" });
-  res.json({ status: 'success', filename: req.file.originalname });
+  if (!req.file) {
+    return res.status(400).json({ error: "No file uploaded" });
+  }
+
+  res.json({
+    status: 'success',
+    filename: req.file.originalname
+  });
 });
 
 
