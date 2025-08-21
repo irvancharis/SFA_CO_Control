@@ -242,7 +242,6 @@ app.get("/DETAIL_WITH_SUB/:id", (req, res) => {
 });
 
 
-
 app.post('/SUBMIT_CHECKLIST', express.json(), (req, res) => {
   const data = req.body.checklist;
 
@@ -391,7 +390,7 @@ app.get("/DATASALES", (req, res) => {
   });
 });
 
-// ================= SELLING HIST =================
+// ================= SELLING HIST DETAIL=================
 app.get("/HISTSELLING", (req, res) => {
   pool.get((err, db) => {
     if (err) {
@@ -433,6 +432,18 @@ app.get("/HISTSELLING", (req, res) => {
       INNER JOIN SFA_TRANSPROMODETAIL b ON a.NOTRANSAKSI=b.NOTRANSAKSI
       INNER JOIN SFA_PELANGGAN x ON a.IDPELANGGAN=x.ID
       WHERE a.IDSALES='5' AND a.TANGGAL='2025-08-20'
+
+      UNION ALL
+
+      SELECT a.TANGGAL, a.IDSALES, a.NOTRANSAKSI, a.IDPELANGGAN, 
+             x.NAMAPELANGGAN, x.ALAMAT, 
+             b.HARGA, b.IDITEMPRODUK, b.QTY, b.UNIT, 
+             b.QTYCASHBACK, b.JUMLAHCASHBACK, b.QTYPROMO, b.JUMLAHPROMO,
+             'TRANSPROMO' AS SOURCE
+      FROM SFA_PENJUALAN_KHUSUS a
+      INNER JOIN SFA_PENJUALANDETAIL_KHUSUS b ON a.NOTRANSAKSI=b.NOTRANSAKSI
+      INNER JOIN SFA_PELANGGAN x ON a.IDPELANGGAN=x.ID
+      WHERE a.IDSALES='5' AND a.TANGGAL='2025-08-20'
     `;
 
     db.query(sql, (err, result) => {
@@ -447,6 +458,45 @@ app.get("/HISTSELLING", (req, res) => {
     });
   });
 });
+
+//=================== HIST SELLING PER ID ==========
+app.get("/DATAHISTSELLING", (req, res) => {
+  const idPelanggan = req.query.idpelanggan; // ?idpelanggan=1048CNV10313
+
+  pool.get((err, db) => {
+    if (err) {
+      console.error("Firebird connection error:", err);
+      return res.status(500).json({ error: "Database connection gagal" });
+    }
+
+    const sql = `
+      SELECT d.IDPELANGGAN, d.IDSALES, d.TANGGAL
+      FROM (
+        SELECT a.IDPELANGGAN, a.IDSALES, a.TANGGAL FROM SFA_PENJUALAN a
+        UNION ALL
+        SELECT a.IDPELANGGAN, a.IDSALES, a.TANGGAL FROM SFA_PROMOVENDOR a
+        UNION ALL
+        SELECT a.IDPELANGGAN, a.IDSALES, a.TANGGAL FROM SFA_TRANSPROMO a
+        UNION ALL
+        SELECT a.IDPELANGGAN, a.IDSALES, a.TANGGAL FROM SFA_PENJUALAN_KHUSUS a
+      ) d
+      WHERE d.IDPELANGGAN = ?
+      ORDER BY d.TANGGAL DESC
+    `;
+
+    db.query(sql, [idPelanggan], (err, result) => {
+      db.detach();
+
+      if (err) {
+        console.error("Query error:", err);
+        return res.status(500).json({ error: "Query gagal" });
+      }
+
+      res.json(result);
+    });
+  });
+});
+
 
 // ================= UPLOAD DB =================
 app.post('/upload-db', upload.single('file'), (req, res) => {
