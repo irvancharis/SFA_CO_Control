@@ -391,7 +391,21 @@ app.get("/DATASALES", (req, res) => {
 });
 
 // ================= SELLING HIST DETAIL=================
-app.get("/HISTSELLING", (req, res) => {
+app.get("/DETAILHISTORYSELLING/:idSales/:tanggal/:idPelanggan", (req, res) => {
+  const { idSales, tanggal, idPelanggan } = req.params;
+
+  // 🔎 Convert tanggal dari ISO ke format YYYY-MM-DD
+  let tglFormatted;
+  try {
+    tglFormatted = new Date(tanggal).toISOString().slice(0, 10);
+  } catch (e) {
+    console.error("Format tanggal tidak valid:", tanggal);
+    return res.status(400).json({ error: "Format tanggal tidak valid" });
+  }
+
+  // Debug log parameter
+  console.log("DETAILHISTORYSELLING Params diterima:", { idSales, tanggal, tglFormatted, idPelanggan });
+
   pool.get((err, db) => {
     if (err) {
       console.error("Firebird connection error:", err);
@@ -407,7 +421,7 @@ app.get("/HISTSELLING", (req, res) => {
       FROM SFA_PENJUALAN a
       INNER JOIN SFA_PENJUALANDETAIL b ON a.NOTRANSAKSI=b.NOTRANSAKSI
       INNER JOIN SFA_PELANGGAN x ON a.IDPELANGGAN=x.ID
-      WHERE a.IDSALES='5' AND a.TANGGAL='2025-08-20'
+      WHERE a.IDSALES=? AND a.TANGGAL=? AND a.IDPELANGGAN=?
 
       UNION ALL
 
@@ -419,7 +433,7 @@ app.get("/HISTSELLING", (req, res) => {
       FROM SFA_PROMOVENDOR a
       INNER JOIN SFA_PROMOVENDORDETAIL b ON a.NOTRANSAKSI=b.NOTRANSAKSI
       INNER JOIN SFA_PELANGGAN x ON a.IDPELANGGAN=x.ID
-      WHERE a.IDSALES='5' AND a.TANGGAL='2025-08-20'
+      WHERE a.IDSALES=? AND a.TANGGAL=? AND a.IDPELANGGAN=?
 
       UNION ALL
 
@@ -431,7 +445,7 @@ app.get("/HISTSELLING", (req, res) => {
       FROM SFA_TRANSPROMO a
       INNER JOIN SFA_TRANSPROMODETAIL b ON a.NOTRANSAKSI=b.NOTRANSAKSI
       INNER JOIN SFA_PELANGGAN x ON a.IDPELANGGAN=x.ID
-      WHERE a.IDSALES='5' AND a.TANGGAL='2025-08-20'
+      WHERE a.IDSALES=? AND a.TANGGAL=? AND a.IDPELANGGAN=?
 
       UNION ALL
 
@@ -439,14 +453,24 @@ app.get("/HISTSELLING", (req, res) => {
              x.NAMAPELANGGAN, x.ALAMAT, 
              b.HARGA, b.IDITEMPRODUK, b.QTY, b.UNIT, 
              b.QTYCASHBACK, b.JUMLAHCASHBACK, b.QTYPROMO, b.JUMLAHPROMO,
-             'TRANSPROMO' AS SOURCE
+             'PENJUALAN_KHUSUS' AS SOURCE
       FROM SFA_PENJUALAN_KHUSUS a
       INNER JOIN SFA_PENJUALANDETAIL_KHUSUS b ON a.NOTRANSAKSI=b.NOTRANSAKSI
       INNER JOIN SFA_PELANGGAN x ON a.IDPELANGGAN=x.ID
-      WHERE a.IDSALES='5' AND a.TANGGAL='2025-08-20'
+      WHERE a.IDSALES=? AND a.TANGGAL=? AND a.IDPELANGGAN=?
     `;
 
-    db.query(sql, (err, result) => {
+    const params = [
+      idSales, tglFormatted, idPelanggan,
+      idSales, tglFormatted, idPelanggan,
+      idSales, tglFormatted, idPelanggan,
+      idSales, tglFormatted, idPelanggan,
+    ];
+
+    // Debug log params query
+    console.log("DETAILHISTORYSELLING Params query:", params);
+
+    db.query(sql, params, (err, result) => {
       db.detach();
 
       if (err) {
@@ -454,14 +478,19 @@ app.get("/HISTSELLING", (req, res) => {
         return res.status(500).json({ error: "Query gagal" });
       }
 
+      console.log("DETAILHISTORYSELLING result count:", result?.length || 0);
       res.json(result);
     });
   });
 });
 
+
+
+
+
 //=================== HIST SELLING PER ID ==========
-app.get("/DATAHISTSELLING", (req, res) => {
-  const idPelanggan = req.query.idpelanggan; // ?idpelanggan=1048CNV10313
+app.get("/DATAHISTORYSELLING/:idpelanggan", (req, res) => {
+  const idPelanggan = req.params.idpelanggan;
 
   pool.get((err, db) => {
     if (err) {
@@ -470,7 +499,7 @@ app.get("/DATAHISTSELLING", (req, res) => {
     }
 
     const sql = `
-      SELECT d.IDPELANGGAN, d.IDSALES, d.TANGGAL
+      SELECT FIRST 2 d.IDPELANGGAN, d.IDSALES, d.TANGGAL
       FROM (
         SELECT a.IDPELANGGAN, a.IDSALES, a.TANGGAL FROM SFA_PENJUALAN a
         UNION ALL
@@ -496,6 +525,7 @@ app.get("/DATAHISTSELLING", (req, res) => {
     });
   });
 });
+
 
 
 // ================= UPLOAD DB =================
