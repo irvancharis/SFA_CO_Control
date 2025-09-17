@@ -34,10 +34,8 @@ const photoStorage = multer.diskStorage({
   destination: function (req, file, cb) {
     cb(null, photoUploadDir); // Folder 'uploads/photos'
   },
-  filename: function (req, file, cb) {
-    // Buat nama unik: timestamp + originalname
-    const uniqueName = `${Date.now()}_${file.originalname}`;
-    cb(null, uniqueName);
+  filename: (req, file, cb) => {
+    cb(null, file.originalname);
   }
 });
 
