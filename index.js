@@ -5,26 +5,59 @@ const { pool, Firebird, NOOP } = require("./firebird"); // pastikan ini betul
 const jwt = require("jsonwebtoken");
 const multer = require('multer');
 const path = require('path');
+const fs = require('fs'); // Import fs module for directory creation
 
 const app = express();
-const PORT = 3000;
+const PORT = 3333;
 
+// --- Buat folder upload jika belum ada ---
+const dbUploadDir = path.join(__dirname, 'uploads', 'databases');
+const photoUploadDir = path.join(__dirname, 'uploads', 'photos');
 
-const storage = multer.diskStorage({
+// Pastikan folder ada
+fs.mkdirSync(dbUploadDir, { recursive: true });
+fs.mkdirSync(photoUploadDir, { recursive: true });
+
+// --- Konfigurasi Multer untuk Database Uploads ---
+const dbStorage = multer.diskStorage({
   destination: function (req, file, cb) {
-    cb(null, path.join(__dirname, 'uploads')); // Folder 'uploads' di root project
+    cb(null, dbUploadDir); // Folder 'uploads/databases'
   },
   filename: function (req, file, cb) {
-    // Optional: Ganti nama file jika ingin
     cb(null, file.originalname);
   }
 });
-const upload = multer({ storage: storage });
+const uploadDb = multer({ storage: dbStorage });
 
+// --- Konfigurasi Multer untuk Photo Uploads ---
+const photoStorage = multer.diskStorage({
+  destination: function (req, file, cb) {
+    cb(null, photoUploadDir); // Folder 'uploads/photos'
+  },
+  filename: function (req, file, cb) {
+    // Buat nama unik: timestamp + originalname
+    const uniqueName = `${Date.now()}_${file.originalname}`;
+    cb(null, uniqueName);
+  }
+});
 
+const uploadPhoto = multer({
+  storage: photoStorage,
+  limits: { fileSize: 10 * 1024 * 1024 }, // max 10MB
+  fileFilter: (req, file, cb) => {
+    const allowedExt = [".jpg", ".jpeg", ".png"];
+    const ext = file.originalname.toLowerCase().slice(file.originalname.lastIndexOf("."));
+    if (!allowedExt.includes(ext)) {
+      return cb(new Error("Hanya file JPG, JPEG, PNG yang diperbolehkan"));
+    }
+    cb(null, true);
+  }
+});
 
 
 app.use(bodyParser.json());
+app.use(bodyParser.urlencoded({ extended: true })); 
+
 
 // Helper: buat JWT
 function createToken(payload) {
@@ -43,7 +76,7 @@ app.post("/login", (req, res) => {
   const { username, password } = req.body;
 
   if (!username || !password) {
-    return res.status(400).json({ error: "Username dan password wajib diisi" }); 
+    return res.status(400).json({ error: "Username dan password wajib diisi" });
   }
 
   pool.get((err, db) => {
@@ -88,7 +121,7 @@ app.post("/login", (req, res) => {
 });
 
 app.get("/FEATURE", (req, res) => {
-  
+
   pool.get((err, db) => {
     if (err) {
       console.error("Firebird connection error:", err);
@@ -108,7 +141,7 @@ app.get("/FEATURE", (req, res) => {
 
 
 app.get("/DETAIL_FEATURE", (req, res) => {
-  
+
   pool.get((err, db) => {
     if (err) {
       console.error("Firebird connection error:", err);
@@ -128,7 +161,7 @@ app.get("/DETAIL_FEATURE", (req, res) => {
 
 
 app.get("/SUBDETAIL_FEATURE", (req, res) => {
-  
+
   pool.get((err, db) => {
     if (err) {
       console.error("Firebird connection error:", err);
@@ -277,17 +310,17 @@ app.get("/JOINT_CALL_DETAIL/:nocall", (req, res) => {
     }
 
     const query = `
-      SELECT 
-  a.NOCALL, 
-  a.NODETAIL, 
-  a.IDPELANGGAN, 
-  b.NAMAPELANGGAN, 
-  b.ALAMAT, 
-  b.KECAMATAN, 
-  b.KOTAKABUPATEN, 
-  b.LATITUDE, 
-  b.LONGITUDE, 
-  b.TIPE as TIPEPELANGGAN, 
+      SELECT
+  a.NOCALL,
+  a.NODETAIL,
+  a.IDPELANGGAN,
+  b.NAMAPELANGGAN,
+  b.ALAMAT,
+  b.KECAMATAN,
+  b.KOTAKABUPATEN,
+  b.LATITUDE,
+  b.LONGITUDE,
+  b.TIPE as TIPEPELANGGAN,
   b.TOP as TIPEPEMBAYARAN
 FROM BSA_CALLDETAIL a
 INNER JOIN BSA_PELANGGAN b ON a.IDPELANGGAN = b.BARCODE
@@ -331,15 +364,15 @@ app.get("/CONTROL_CALL_DETAIL/:nocall", (req, res) => {
     }
 
     const query = `
-      SELECT 
-  a.NOCALL, 
-  a.NODETAIL, 
+      SELECT
+  a.NOCALL,
+  a.NODETAIL,
   a.IDPELANGGAN,
-  b.NAMAPELANGGAN, 
-  b.ALAMAT, 
-  b.KECAMATAN, 
-  b.KOTAKABUPATEN, 
-  a.LATITUDE, 
+  b.NAMAPELANGGAN,
+  b.ALAMAT,
+  b.KECAMATAN,
+  b.KOTAKABUPATEN,
+  a.LATITUDE,
   a.LONGITUDE
 FROM SFA_CALLDETAIL a
 INNER JOIN SFA_PELANGGAN b ON a.IDPELANGGAN = b.ID
@@ -369,7 +402,7 @@ ORDER BY a.NODETAIL ASC;
 
 //MASTER_DATASALES
 app.get("/DATASALES", (req, res) => {
-  
+
   pool.get((err, db) => {
     if (err) {
       console.error("Firebird connection error:", err);
@@ -413,11 +446,11 @@ app.get("/DETAILHISTORYSELLING/:idSales/:tanggal/:idPelanggan", (req, res) => {
     }
 
     const sql = `
-      SELECT a.TANGGAL, a.IDSALES, a.NOTRANSAKSI, a.IDPELANGGAN, 
-             x.NAMAPELANGGAN, x.ALAMAT, 
-             b.HARGA, b.IDITEMPRODUK, b.QTY, b.UNIT, 
-             b.QTYCASHBACK, b.JUMLAHCASHBACK, b.QTYPROMO, b.JUMLAHPROMO,
-             'PENJUALAN' AS SOURCE
+      SELECT a.TANGGAL, a.IDSALES, a.NOTRANSAKSI, a.IDPELANGGAN,
+            x.NAMAPELANGGAN, x.ALAMAT,
+            b.HARGA, b.IDITEMPRODUK, b.QTY, b.UNIT,
+            b.QTYCASHBACK, b.JUMLAHCASHBACK, b.QTYPROMO, b.JUMLAHPROMO,
+            'PENJUALAN' AS SOURCE
       FROM SFA_PENJUALAN a
       INNER JOIN SFA_PENJUALANDETAIL b ON a.NOTRANSAKSI=b.NOTRANSAKSI
       INNER JOIN SFA_PELANGGAN x ON a.IDPELANGGAN=x.ID
@@ -425,11 +458,11 @@ app.get("/DETAILHISTORYSELLING/:idSales/:tanggal/:idPelanggan", (req, res) => {
 
       UNION ALL
 
-      SELECT a.TANGGAL, a.IDSALES, a.NOTRANSAKSI, a.IDPELANGGAN, 
-             x.NAMAPELANGGAN, x.ALAMAT, 
-             b.HARGA, b.IDITEMPRODUK, b.QTY, b.UNIT, 
-             b.QTYCASHBACK, b.JUMLAHCASHBACK, b.QTYPROMO, b.JUMLAHPROMO,
-             'PROMOVENDOR' AS SOURCE
+      SELECT a.TANGGAL, a.IDSALES, a.NOTRANSAKSI, a.IDPELANGGAN,
+            x.NAMAPELANGGAN, x.ALAMAT,
+            b.HARGA, b.IDITEMPRODUK, b.QTY, b.UNIT,
+            b.QTYCASHBACK, b.JUMLAHCASHBACK, b.QTYPROMO, b.JUMLAHPROMO,
+            'PROMOVENDOR' AS SOURCE
       FROM SFA_PROMOVENDOR a
       INNER JOIN SFA_PROMOVENDORDETAIL b ON a.NOTRANSAKSI=b.NOTRANSAKSI
       INNER JOIN SFA_PELANGGAN x ON a.IDPELANGGAN=x.ID
@@ -437,11 +470,11 @@ app.get("/DETAILHISTORYSELLING/:idSales/:tanggal/:idPelanggan", (req, res) => {
 
       UNION ALL
 
-      SELECT a.TANGGAL, a.IDSALES, a.NOTRANSAKSI, a.IDPELANGGAN, 
-             x.NAMAPELANGGAN, x.ALAMAT, 
-             b.HARGA, b.IDITEMPRODUK, b.QTY, b.UNIT, 
-             b.QTYCASHBACK, b.JUMLAHCASHBACK, b.QTYPROMO, b.JUMLAHPROMO,
-             'TRANSPROMO' AS SOURCE
+      SELECT a.TANGGAL, a.IDSALES, a.NOTRANSAKSI, a.IDPELANGGAN,
+            x.NAMAPELANGGAN, x.ALAMAT,
+            b.HARGA, b.IDITEMPRODUK, b.QTY, b.UNIT,
+            b.QTYCASHBACK, b.JUMLAHCASHBACK, b.QTYPROMO, b.JUMLAHPROMO,
+            'TRANSPROMO' AS SOURCE
       FROM SFA_TRANSPROMO a
       INNER JOIN SFA_TRANSPROMODETAIL b ON a.NOTRANSAKSI=b.NOTRANSAKSI
       INNER JOIN SFA_PELANGGAN x ON a.IDPELANGGAN=x.ID
@@ -449,11 +482,11 @@ app.get("/DETAILHISTORYSELLING/:idSales/:tanggal/:idPelanggan", (req, res) => {
 
       UNION ALL
 
-      SELECT a.TANGGAL, a.IDSALES, a.NOTRANSAKSI, a.IDPELANGGAN, 
-             x.NAMAPELANGGAN, x.ALAMAT, 
-             b.HARGA, b.IDITEMPRODUK, b.QTY, b.UNIT, 
-             b.QTYCASHBACK, b.JUMLAHCASHBACK, b.QTYPROMO, b.JUMLAHPROMO,
-             'PENJUALAN_KHUSUS' AS SOURCE
+      SELECT a.TANGGAL, a.IDSALES, a.NOTRANSAKSI, a.IDPELANGGAN,
+            x.NAMAPELANGGAN, x.ALAMAT,
+            b.HARGA, b.IDITEMPRODUK, b.QTY, b.UNIT,
+            b.QTYCASHBACK, b.JUMLAHCASHBACK, b.QTYPROMO, b.JUMLAHPROMO,
+            'PENJUALAN_KHUSUS' AS SOURCE
       FROM SFA_PENJUALAN_KHUSUS a
       INNER JOIN SFA_PENJUALANDETAIL_KHUSUS b ON a.NOTRANSAKSI=b.NOTRANSAKSI
       INNER JOIN SFA_PELANGGAN x ON a.IDPELANGGAN=x.ID
@@ -529,14 +562,16 @@ app.get("/DATAHISTORYSELLING/:idpelanggan", (req, res) => {
 
 
 // ================= UPLOAD DB =================
-app.post('/upload-db', upload.single('file'), (req, res) => {
+// Menggunakan uploadDb untuk upload database
+app.post('/upload-db', uploadDb.single('file'), (req, res) => {
   if (!req.file) {
     return res.status(400).json({ error: "No file uploaded" });
   }
 
   res.json({
     status: 'success',
-    filename: req.file.originalname
+    filename: req.file.filename, // Menggunakan filename dari multer (nama file yang disimpan)
+    filepath: req.file.path // Path lengkap file yang disimpan
   });
 });
 
@@ -615,7 +650,7 @@ app.post("/SUBMIT_VISIT", (req, res) => {
         console.log(`🚀 Menyimpan VISIT: ${id_visit}`);
 
         const insertVisit = `
-          INSERT INTO SFA_VISIT 
+          INSERT INTO SFA_VISIT
           (ID_VISIT, TANGGAL, IDSPV, IDPELANGGAN, LATITUDE, LONGITUDE, MULAI, SELESAI, CATATAN, IDSALES, NOCALL)
           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `;
@@ -635,7 +670,7 @@ app.post("/SUBMIT_VISIT", (req, res) => {
         ]);
 
         const insertDetail = `
-          INSERT INTO SFA_VISITDET 
+          INSERT INTO SFA_VISITDET
           (ID_VISIT, ID_FEATURE, ID_FEATUREDETAIL, ID_FEATURESUBDETAIL, CHECKLIST)
           VALUES (?, ?, ?, ?, ?)
         `;
@@ -649,9 +684,9 @@ app.post("/SUBMIT_VISIT", (req, res) => {
           for (const sub of subDetails) {
             const checklist = sub.is_checked ? 1 : 0;
             const id_sub = sub.id_feature_sub_detail;
-          
-            console.log(`   ↳ Sub: ${id_sub} | Checked: ${checklist}`);
-          
+
+            console.log(`    ↳ Sub: ${id_sub} | Checked: ${checklist}`);
+
             await queryAsync(tx, insertDetail, [
               id_visit,
               id_feature,
@@ -660,7 +695,7 @@ app.post("/SUBMIT_VISIT", (req, res) => {
               checklist
             ]);
           }
-          
+
         }
 
         tx.commit((err) => {
@@ -707,6 +742,19 @@ app.get("/users", (req, res) => {
   });
 });
 
+// Menggunakan uploadPhoto untuk upload selfie
+app.post('/upload-selfie', uploadPhoto.single('selfie'), (req, res) => {
+  if (!req.file) {
+      return res.status(400).json({ message: 'Tidak ada file yang diunggah.' });
+  }
+
+  res.status(200).json({
+      message: 'Selfie berhasil diunggah!',
+      filename: req.file.filename,
+      filepath: req.file.path
+  });
+});
+
 // Helper untuk promisify query Firebird
 function queryAsync(tx, sql, params) {
   return new Promise((resolve, reject) => {
@@ -720,4 +768,6 @@ function queryAsync(tx, sql, params) {
 // Mulai server
 app.listen(PORT, () => {
   console.log(`🚀 Server running at http://0.0.0.0:${PORT}`);
+  console.log(`📂 Database uploads will go to: ${dbUploadDir}`);
+  console.log(`📸 Photo uploads will go to: ${photoUploadDir}`);
 });

@@ -2,7 +2,7 @@
 const Firebird = require('node-firebird');
 
 const options = {
-  host: '192.168.3.252',
+  host: '182.253.41.204',
   port: 3051,
   database: 'c://sfa/sfabsa3w2025.fdb',
   user: 'SYSDBA',
