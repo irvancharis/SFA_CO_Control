@@ -753,6 +753,40 @@ app.post('/upload-selfie', uploadPhoto.single('selfie'), (req, res) => {
   });
 });
 
+
+// GET /photo/:kodetransaksi -> mengembalikan file uploads/photos/<kodetransaksi>.jpg
+app.get("/photo/:kodetransaksi", (req, res) => {
+  try {
+    const kode = req.params.kodetransaksi;
+    // paksa ekstensi .jpg sesuai permintaan
+    const requestedName = `${kode}.jpg`;
+
+    // resolve path absolut dan cegah path traversal
+    const absPhotosDir = path.resolve(photoUploadDir);
+    const absTarget = path.resolve(path.join(photoUploadDir, requestedName));
+    if (!absTarget.startsWith(absPhotosDir + path.sep) && absTarget !== absPhotosDir) {
+      return res.status(400).json({ error: "Path tidak valid." });
+    }
+
+    // cek file ada
+    fs.stat(absTarget, (err, stat) => {
+      if (err || !stat.isFile()) {
+        return res.status(404).json({ error: "Foto tidak ditemukan." });
+      }
+
+      // set header dan kirim file
+      res.setHeader("Content-Type", "image/jpeg");
+      // cache 1 hari (opsional)
+      res.setHeader("Cache-Control", "public, max-age=86400");
+      return res.sendFile(absTarget);
+    });
+  } catch (e) {
+    console.error("Error serve photo:", e);
+    return res.status(500).json({ error: "Gagal menampilkan foto." });
+  }
+});
+
+
 // Helper untuk promisify query Firebird
 function queryAsync(tx, sql, params) {
   return new Promise((resolve, reject) => {
