@@ -787,6 +787,61 @@ app.get("/photo/:kodetransaksi", (req, res) => {
 });
 
 
+// ================= UPDATE LOKASI PELANGGAN =================
+app.post("/update-location", (req, res) => {
+  const { id_pelanggan, latitude, longitude, updated_by } = req.body;
+
+  // 1. Validasi Input
+  if (!id_pelanggan || !latitude || !longitude) {
+    return res.status(400).json({ 
+      error: "Data tidak lengkap. id_pelanggan, latitude, dan longitude wajib diisi." 
+    });
+  }
+
+  pool.get((err, db) => {
+    if (err) {
+      console.error("❌ Firebird connection error:", err);
+      return res.status(500).json({ error: "Koneksi database gagal" });
+    }
+
+    // 2. Tentukan Query Update
+    // PENTING: Pastikan nama tabel pelanggan Anda yang benar (SFA_PELANGGAN atau BSA_PELANGGAN).
+    // Berdasarkan query '/CONTROL_CALL_DETAIL' sebelumnya, tabelnya adalah SFA_PELANGGAN dan kolom ID adalah 'ID'.
+    // Jika Anda ingin mengupdate tabel master BSA, ubah menjadi BSA_PELANGGAN dan ID menjadi BARCODE.
+    
+    const sql = `
+      UPDATE SFA_PELANGGAN 
+      SET LATITUDE = ?, 
+          LONGITUDE = ?
+          -- , MODIFIED_BY = ?  <-- Aktifkan baris ini jika ada kolom untuk mencatat siapa yang edit
+      WHERE ID = ?
+    `;
+
+    // Array parameter (urutan harus sama dengan tanda tanya di SQL)
+    const params = [latitude, longitude, id_pelanggan];
+
+    // 3. Eksekusi Query
+    db.query(sql, params, (err, result) => {
+      // Commit transaksi (di node-firebird, detach biasanya melakukan commit otomatis jika tidak ada error)
+      db.detach(); 
+
+      if (err) {
+        console.error("❌ Gagal update lokasi:", err);
+        return res.status(500).json({ error: "Gagal mengupdate lokasi di database." });
+      }
+
+      console.log(`✅ Lokasi Pelanggan ${id_pelanggan} berhasil diupdate ke: ${latitude}, ${longitude}`);
+      
+      return res.json({ 
+        success: true, 
+        message: "Koordinat toko berhasil diperbarui.",
+        data: { id_pelanggan, latitude, longitude }
+      });
+    });
+  });
+});
+
+
 // Helper untuk promisify query Firebird
 function queryAsync(tx, sql, params) {
   return new Promise((resolve, reject) => {
