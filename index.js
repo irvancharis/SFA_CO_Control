@@ -611,25 +611,16 @@ app.post("/SUBMIT_VISIT", (req, res) => {
   });
 
   // 🛑 Validasi
+  // Pastikan ID VISIT tidak kosong agar query DELETE dan INSERT berfungsi dengan benar.
   if (
     !id_visit || !tanggal || !id_spv || !id_pelanggan ||
     !mulai || !selesai || !id_sales || !nocall
   ) {
-    console.warn("❌ VALIDASI GAGAL. Data yang tidak lengkap:");
-    if (!id_visit) console.warn(" - id_visit kosong/null");
-    if (!tanggal) console.warn(" - tanggal kosong/null");
-    if (!id_spv) console.warn(" - idspv kosong/null");
-    if (!id_pelanggan) console.warn(" - idpelanggan kosong/null");
-    if (!mulai) console.warn(" - mulai kosong/null");
-    if (!selesai) console.warn(" - selesai kosong/null");
-    if (!id_sales) console.warn(" - id_sales kosong/null");
-    if (!nocall) console.warn(" - nocall kosong/null");
-    if (!Array.isArray(details)) console.warn(" - details bukan array");
-
+    console.warn("❌ VALIDASI GAGAL. Data tidak lengkap.");
     return res.status(400).json({ error: "Data tidak lengkap" });
   }
 
-  // ✅ Lanjut insert ke DB...
+  // ✅ Lanjut insert/replace ke DB...
   pool.get((err, db) => {
     if (err) {
       console.error("❌ Koneksi DB gagal:", err);
@@ -644,8 +635,24 @@ app.post("/SUBMIT_VISIT", (req, res) => {
       }
 
       try {
-        // Log ringkasan insert visit
-        console.log(`🚀 Menyimpan VISIT: ${id_visit}`);
+        // ==========================================
+        // 🔥 LOGIKA IDEMPOTENT: HAPUS DATA LAMA DULU 🔥
+        // Ini mencegah error "PRIMARY KEY violation" jika data di-submit ulang.
+        // ==========================================
+        console.log(`♻️ Membersihkan data lama (jika ada) untuk ID: ${id_visit}`);
+
+        // 1. Hapus Detail (Child) terlebih dahulu
+        const deleteDetailQuery = `DELETE FROM SFA_VISITDET WHERE ID_VISIT = ?`;
+        await queryAsync(tx, deleteDetailQuery, [id_visit]);
+
+        // 2. Hapus Header (Parent)
+        const deleteVisitQuery = `DELETE FROM SFA_VISIT WHERE ID_VISIT = ?`;
+        await queryAsync(tx, deleteVisitQuery, [id_visit]);
+
+        // ==========================================
+        // 🚀 MULAI INSERT DATA BARU
+        // ==========================================
+        console.log(`🚀 Menyimpan VISIT BARU: ${id_visit}`);
 
         const insertVisit = `
           INSERT INTO SFA_VISIT
@@ -653,6 +660,7 @@ app.post("/SUBMIT_VISIT", (req, res) => {
           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `;
 
+        // INSERT Header (SFA_VISIT)
         await queryAsync(tx, insertVisit, [
           id_visit,
           new Date(tanggal),
@@ -673,39 +681,43 @@ app.post("/SUBMIT_VISIT", (req, res) => {
           VALUES (?, ?, ?, ?, ?)
         `;
 
-        for (const detail of details) {
-          const id_featuredetail = detail.id_feature_detail;
-          const subDetails = detail.sub_details || [];
+        // INSERT Detail (SFA_VISITDET)
+        if (Array.isArray(details)) {
+            for (const detail of details) {
+            const id_featuredetail = detail.id_feature_detail;
+            const subDetails = detail.sub_details || [];
 
-          console.log(`📌 Detail: ${id_featuredetail} | sub: ${subDetails.length}`);
+            console.log(`📌 Detail: ${id_featuredetail} | sub: ${subDetails.length}`);
 
-          for (const sub of subDetails) {
-            const checklist = sub.is_checked ? 1 : 0;
-            const id_sub = sub.id_feature_sub_detail;
+            for (const sub of subDetails) {
+                const checklist = sub.is_checked ? 1 : 0;
+                const id_sub = sub.id_feature_sub_detail;
 
-            console.log(`    ↳ Sub: ${id_sub} | Checked: ${checklist}`);
-
-            await queryAsync(tx, insertDetail, [
-              id_visit,
-              id_feature,
-              id_featuredetail,
-              id_sub,
-              checklist
-            ]);
-          }
-
+                await queryAsync(tx, insertDetail, [
+                id_visit,
+                id_feature,
+                id_featuredetail,
+                id_sub,
+                checklist
+                ]);
+            }
+            }
         }
 
+        // COMMIT Transaksi
         tx.commit((err) => {
           db.detach();
           if (err) {
             console.error("❌ Gagal commit:", err);
-            return res.status(500).json({ error: "Gagal menyimpan data" });
+            // Walaupun commit gagal, data lama (jika ada) sudah hilang dan data baru mungkin sudah setengah masuk, 
+            // tetapi ini adalah titik kegagalan yang paling sulit ditangani. Kita anggap ini error internal server.
+            return res.status(500).json({ error: "Gagal menyimpan data (Commit Gagal)" });
           }
-          return res.json({ success: true, message: "Checklist berhasil disimpan" });
+          return res.json({ success: true, message: "Checklist berhasil disimpan/diperbarui" });
         });
 
       } catch (e) {
+        // Rollback jika terjadi error pada DELETE atau salah satu INSERT
         console.error("❌ Exception transaksi:", e);
         tx.rollback(() => {
           db.detach();
