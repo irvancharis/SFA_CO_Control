@@ -84,7 +84,7 @@ app.post("/login", (req, res) => {
     }
 
     const sql = `
-        SELECT USERNAME, PASSWORD_SFA, FLAGSALES
+        SELECT USERNAME, IDSPV, PASSWORD_SFA, FLAGSALES
         FROM VIEW_SFA_LOGIN
         WHERE USERNAME = ? AND PASSWORD_SFA = ?
       `;
@@ -103,14 +103,14 @@ app.post("/login", (req, res) => {
 
       const user = result[0];
       const token = createToken({
-        id: user.USERNAME,
+        id: user.IDSPV,
         name: user.USERNAME,
       });
 
       return res.status(200).json({
         token,
         user: {
-          id: user.USERNAME,
+          id: user.IDSPV,
           name: user.USERNAME,
         },
       });
