@@ -833,13 +833,6 @@ class _FeatureCard extends StatelessWidget {
                       fontSize: 13),
                 ),
                 const SizedBox(height: 4),
-                Text(
-                  'Explore Menu',
-                  style: TextStyle(
-                      color: _UX.textMuted.withValues(alpha: 0.6),
-                      fontSize: 10,
-                      fontWeight: FontWeight.bold),
-                ),
               ],
             ),
           ),
