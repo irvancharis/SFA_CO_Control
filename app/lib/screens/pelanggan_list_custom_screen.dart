@@ -110,21 +110,74 @@ class _PelangganListCustomScreenState extends State<PelangganListCustomScreen> {
     setState(() => filteredPelangganList = base);
   }
 
-  // ===== Back confirm (tanpa hapus stack) =====
-  Future<bool> _handleWillPop() async {
-    final keluar = await showDialog<bool>(
+  Future<void> _showExitConfirmation() async {
+    final bool? keluar = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Konfirmasi'),
-        content: const Text('Yakin ingin kembali ke Dashboard?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('Tidak'),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        titlePadding: EdgeInsets.zero,
+        contentPadding: const EdgeInsets.fromLTRB(24, 20, 24, 16),
+        title: Container(
+          padding: const EdgeInsets.symmetric(vertical: 24),
+          decoration: BoxDecoration(
+            color: _UX.primary.withValues(alpha: 0.1),
+            borderRadius: const BorderRadius.only(
+              topLeft: Radius.circular(24),
+              topRight: Radius.circular(24),
+            ),
           ),
-          ElevatedButton(
-            onPressed: () => Navigator.of(ctx).pop(true),
-            child: const Text('Iya'),
+          child: const Icon(Icons.dashboard_outlined,
+              color: _UX.primary, size: 44),
+        ),
+        content: const Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              'Kembali ke Dashboard?',
+              style: TextStyle(fontWeight: FontWeight.w800, fontSize: 18),
+            ),
+            SizedBox(height: 10),
+            Text(
+              'Anda yakin akan kembali ke dashboard?',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: _UX.textMuted, fontSize: 13, height: 1.5),
+            ),
+          ],
+        ),
+        actionsPadding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+        actions: [
+          Row(
+            children: [
+              Expanded(
+                child: TextButton(
+                  onPressed: () => Navigator.of(ctx).pop(false),
+                  style: TextButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14)),
+                  ),
+                  child: const Text('Batal',
+                      style: TextStyle(
+                          color: _UX.textMuted, fontWeight: FontWeight.bold)),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: ElevatedButton(
+                  onPressed: () => Navigator.of(ctx).pop(true),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: _UX.primary,
+                    foregroundColor: Colors.white,
+                    elevation: 0,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14)),
+                  ),
+                  child: const Text('Ya, Kembali',
+                      style: TextStyle(fontWeight: FontWeight.bold)),
+                ),
+              ),
+            ],
           ),
         ],
       ),
@@ -136,7 +189,6 @@ class _PelangganListCustomScreenState extends State<PelangganListCustomScreen> {
             .pushNamed('/dashboard', arguments: widget.featureId);
       }
     }
-    return false;
   }
 
   Future<void> pilihTanggal(BuildContext context) async {
@@ -439,8 +491,12 @@ class _PelangganListCustomScreenState extends State<PelangganListCustomScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return WillPopScope(
-      onWillPop: _handleWillPop,
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) async {
+        if (didPop) return;
+        _showExitConfirmation();
+      },
       child: Scaffold(
         backgroundColor: _UX.bg,
         body: RefreshIndicator(
