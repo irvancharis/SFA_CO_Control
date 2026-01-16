@@ -2,6 +2,7 @@ require("dotenv").config();
 const express = require("express");
 const bodyParser = require("body-parser");
 const { pool, Firebird, NOOP } = require("./firebird"); // pastikan ini betul
+const sqliteDb = require("./sqlite_db");
 const jwt = require("jsonwebtoken");
 const multer = require('multer');
 const path = require('path');
@@ -13,10 +14,12 @@ const PORT = 3333;
 // --- Buat folder upload jika belum ada ---
 const dbUploadDir = path.join(__dirname, 'uploads', 'databases');
 const photoUploadDir = path.join(__dirname, 'uploads', 'photos');
+const apkUploadDir = path.join(__dirname, 'public', 'uploads', 'apks'); // In public for direct access
 
 // Pastikan folder ada
 fs.mkdirSync(dbUploadDir, { recursive: true });
 fs.mkdirSync(photoUploadDir, { recursive: true });
+fs.mkdirSync(apkUploadDir, { recursive: true });
 
 // --- Konfigurasi Multer untuk Database Uploads ---
 const dbStorage = multer.diskStorage({
@@ -52,9 +55,42 @@ const uploadPhoto = multer({
   }
 });
 
+// --- Konfigurasi Multer untuk APK Uploads ---
+const apkStorage = multer.diskStorage({
+  destination: function (req, file, cb) {
+    cb(null, apkUploadDir);
+  },
+  filename: function (req, file, cb) {
+    const ext = path.extname(file.originalname);
+    const safeName = file.originalname.replace(/[^a-z0-9.]/gi, '_').toLowerCase();
+    cb(null, `update_${Date.now()}_${safeName}`);
+  }
+});
+
+const uploadApk = multer({ 
+  storage: apkStorage,
+  fileFilter: (req, file, cb) => {
+    if (path.extname(file.originalname).toLowerCase() !== '.apk') {
+      return cb(new Error('Hanya file .apk yang diperbolehkan'));
+    }
+    cb(null, true);
+  }
+});
+
 
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true })); 
+app.use(express.static(path.join(__dirname, 'public')));
+
+// Helper: queryAsync for simple queries
+const queryAsyncSimple = (db, sql, params = []) => {
+    return new Promise((resolve, reject) => {
+        db.query(sql, params, (err, result) => {
+            if (err) reject(err);
+            else resolve(result);
+        });
+    });
+};
 
 
 // Helper: buat JWT
@@ -863,6 +899,68 @@ function queryAsync(tx, sql, params) {
     });
   });
 }
+
+// ================= APK VERSION CONTROL (SQLITE) =================
+
+// Public endpoint for mobile app to check latest version
+app.get("/api/apk-latest", (req, res) => {
+  const sql = "SELECT * FROM apk_versions ORDER BY version_code DESC LIMIT 1";
+  sqliteDb.get(sql, [], (err, row) => {
+    if (err) return res.status(500).json({ error: "Query failed", details: err.message });
+    res.json(row || null);
+  });
+});
+
+// Admin endpoint: List all versions
+app.get("/api/admin/apk-versions", (req, res) => {
+  const sql = "SELECT * FROM apk_versions ORDER BY version_code DESC";
+  sqliteDb.all(sql, [], (err, rows) => {
+    if (err) return res.status(500).json({ error: "Query failed", details: err.message });
+    res.json(rows);
+  });
+});
+
+// Admin endpoint: Add new version (Handling File Upload)
+app.post("/api/admin/apk-versions", uploadApk.single('apk_file'), (req, res) => {
+  const { version_name, version_code, release_notes, is_force_update } = req.body;
+  let download_url = req.body.download_url; // Manual URL fallback
+
+  // If a file was uploaded, construct the URL
+  if (req.file) {
+    // Construction URL based on host. 
+    // In production, you might want to use a more robust way to get the base URL.
+    const protocol = req.protocol;
+    const host = req.get('host');
+    download_url = `${protocol}://${host}/uploads/apks/${req.file.filename}`;
+  }
+
+  if (!version_name || !version_code || !download_url) {
+    return res.status(400).json({ error: "Missing required fields (version, code, and file/url)" });
+  }
+
+  const sql = `
+    INSERT INTO apk_versions (version_name, version_code, download_url, release_notes, is_force_update)
+    VALUES (?, ?, ?, ?, ?)
+  `;
+  const params = [version_name, version_code, download_url, release_notes, is_force_update || 0];
+
+  sqliteDb.run(sql, params, function(err) {
+    if (err) {
+      console.error("Insert error:", err);
+      return res.status(500).json({ error: "Failed to insert version" });
+    }
+    res.json({ success: true, id: this.lastID });
+  });
+});
+
+// Admin endpoint: Delete version
+app.delete("/api/admin/apk-versions/:id", (req, res) => {
+  const { id } = req.params;
+  sqliteDb.run("DELETE FROM apk_versions WHERE id = ?", [id], function(err) {
+    if (err) return res.status(500).json({ error: "Delete failed" });
+    res.json({ success: true });
+  });
+});
 
 // Mulai server
 app.listen(PORT, () => {
