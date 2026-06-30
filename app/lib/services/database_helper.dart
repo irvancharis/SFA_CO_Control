@@ -131,6 +131,20 @@ class DatabaseHelper {
         PRIMARY KEY (id_visit, id_feature, id_featuredetail, id_featuresubdetail)
       )
     ''');
+
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS posm_audit (
+        id_visit TEXT,
+        sku TEXT,
+        subject TEXT,
+        placement INTEGER,
+        hilang INTEGER,
+        masih_ada INTEGER,
+        rusak INTEGER,
+        dirapikan INTEGER,
+        PRIMARY KEY (id_visit, sku, subject)
+      )
+    ''');
   }
 
   /// Pakai ini kalau kamu perlu memaksa buka ulang koneksi
@@ -441,11 +455,49 @@ class DatabaseHelper {
     await db.delete('feature');
     await db.delete('sales');
     await db.delete('pelanggan');
+    await db.delete('posm_audit');
     // tambahkan tabel lain jika ada
   }
 
   Future<void> clearTable(String table) async {
     final db = await database;
     await db.delete(table);
+  }
+
+  // ==== POSM AUDIT ====
+  Future<void> upsertPosmAudit({
+    required String idVisit,
+    required String sku,
+    required String subject,
+    required int placement,
+    required int hilang,
+    required int masihAda,
+    required int rusak,
+    required int dirapikan,
+  }) async {
+    final db = await database;
+    await db.insert(
+      'posm_audit',
+      {
+        'id_visit': idVisit,
+        'sku': sku,
+        'subject': subject,
+        'placement': placement,
+        'hilang': hilang,
+        'masih_ada': masihAda,
+        'rusak': rusak,
+        'dirapikan': dirapikan,
+      },
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  Future<List<Map<String, dynamic>>> getPosmAuditByVisit(String idVisit) async {
+    final db = await database;
+    return await db.query(
+      'posm_audit',
+      where: 'id_visit = ?',
+      whereArgs: [idVisit],
+    );
   }
 }

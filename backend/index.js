@@ -14,11 +14,13 @@ const PORT = 3333;
 // --- Buat folder upload jika belum ada ---
 const dbUploadDir = path.join(__dirname, 'uploads', 'databases');
 const photoUploadDir = path.join(__dirname, 'uploads', 'photos');
+const posmUploadDir = path.join(__dirname, 'uploads', 'posm');
 const apkUploadDir = path.join(__dirname, 'public', 'uploads', 'apks'); // In public for direct access
 
 // Pastikan folder ada
 fs.mkdirSync(dbUploadDir, { recursive: true });
 fs.mkdirSync(photoUploadDir, { recursive: true });
+fs.mkdirSync(posmUploadDir, { recursive: true });
 fs.mkdirSync(apkUploadDir, { recursive: true });
 
 // --- Konfigurasi Multer untuk Database Uploads ---
@@ -54,6 +56,30 @@ const uploadPhoto = multer({
     cb(null, true);
   }
 });
+
+// --- Konfigurasi Multer untuk POSM Photo Uploads ---
+const posmStorage = multer.diskStorage({
+  destination: function (req, file, cb) {
+    cb(null, posmUploadDir); // Folder 'uploads/posm'
+  },
+  filename: (req, file, cb) => {
+    cb(null, file.originalname);
+  }
+});
+
+const uploadPosm = multer({
+  storage: posmStorage,
+  limits: { fileSize: 10 * 1024 * 1024 }, // max 10MB
+  fileFilter: (req, file, cb) => {
+    const allowedExt = [".jpg", ".jpeg", ".png"];
+    const ext = file.originalname.toLowerCase().slice(file.originalname.lastIndexOf("."));
+    if (!allowedExt.includes(ext)) {
+      return cb(new Error("Hanya file JPG, JPEG, PNG yang diperbolehkan"));
+    }
+    cb(null, true);
+  }
+});
+
 
 // --- Konfigurasi Multer untuk APK Uploads ---
 const apkStorage = multer.diskStorage({
@@ -801,6 +827,19 @@ app.post('/upload-selfie', uploadPhoto.single('selfie'), (req, res) => {
   });
 });
 
+// Menggunakan uploadPosm untuk upload foto POSM
+app.post('/upload-posm', uploadPosm.single('posm'), (req, res) => {
+  if (!req.file) {
+      return res.status(400).json({ message: 'Tidak ada file yang diunggah.' });
+  }
+
+  res.status(200).json({
+      message: 'Foto POSM berhasil diunggah!',
+      filename: req.file.filename,
+      filepath: req.file.path
+  });
+});
+
 
 // GET /photo/:kodetransaksi -> mengembalikan file uploads/photos/<kodetransaksi>.jpg
 app.get("/photo/:kodetransaksi", (req, res) => {
@@ -833,6 +872,39 @@ app.get("/photo/:kodetransaksi", (req, res) => {
     return res.status(500).json({ error: "Gagal menampilkan foto." });
   }
 });
+
+// GET /posm/:kodetransaksi -> mengembalikan file uploads/posm/<kodetransaksi>.jpg
+app.get("/posm/:kodetransaksi", (req, res) => {
+  try {
+    const kode = req.params.kodetransaksi;
+    // paksa ekstensi .jpg sesuai permintaan
+    const requestedName = `${kode}.jpg`;
+
+    // resolve path absolut dan cegah path traversal
+    const absPosmDir = path.resolve(posmUploadDir);
+    const absTarget = path.resolve(path.join(posmUploadDir, requestedName));
+    if (!absTarget.startsWith(absPosmDir + path.sep) && absTarget !== absPosmDir) {
+      return res.status(400).json({ error: "Path tidak valid." });
+    }
+
+    // cek file ada
+    fs.stat(absTarget, (err, stat) => {
+      if (err || !stat.isFile()) {
+        return res.status(404).json({ error: "Foto POSM tidak ditemukan." });
+      }
+
+      // set header dan kirim file
+      res.setHeader("Content-Type", "image/jpeg");
+      // cache 1 hari (opsional)
+      res.setHeader("Cache-Control", "public, max-age=86400");
+      return res.sendFile(absTarget);
+    });
+  } catch (e) {
+    console.error("Error serve POSM photo:", e);
+    return res.status(500).json({ error: "Gagal menampilkan foto POSM." });
+  }
+});
+
 
 
 // ================= UPDATE LOKASI PELANGGAN =================

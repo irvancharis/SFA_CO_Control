@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../models/feature_detail_model.dart';
+import '../models/posm_model.dart';
 // import '../config/server.dart'; // Hapus ini karena sudah pakai api_config
 import '../utils/api_config.dart';
 
@@ -17,6 +18,7 @@ class SubmitService {
     required String catatan,
     required String idFeature,
     required List<FeatureDetail> details,
+    List<POSMAudit>? posmDetails,
     String? idSales,
     String? nocall,
   }) async {
@@ -48,6 +50,7 @@ class SubmitService {
             }).toList(),
           };
         }).toList(),
+        'posm_details': posmDetails?.map((p) => p.toMap()).toList() ?? [],
       };
 
       // --- PERBAIKAN UTAMA DI SINI ---

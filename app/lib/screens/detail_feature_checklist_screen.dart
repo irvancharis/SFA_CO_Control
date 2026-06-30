@@ -75,10 +75,12 @@ class _DetailFeatureChecklistScreenState
   bool isSubmitting = false;
   String visitId = '';
   bool isLoadingChecklist = true;
+  bool _showPhotoButtons = false;
   late TextEditingController catatanController;
 
   // PASTIKAN hanya 1 deklarasi ini dan tipenya File?
   File? _fotoFile;
+  File? _posmFotoFile;
 
   @override
   void initState() {
@@ -208,7 +210,11 @@ class _DetailFeatureChecklistScreenState
       final File? result = await Navigator.push(
         context,
         MaterialPageRoute(
-          builder: (_) => CustomCameraScreen(visitId: visitId),
+          builder: (_) => CustomCameraScreen(
+            visitId: visitId,
+            useFrontCamera: true,
+            fileName: "$visitId.jpg",
+          ),
         ),
       );
 
@@ -242,10 +248,52 @@ class _DetailFeatureChecklistScreenState
     }
   }
 
+  Future<void> _ambilFotoPosm() async {
+    try {
+      final File? result = await Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => CustomCameraScreen(
+            visitId: visitId,
+            useFrontCamera: false, // POSM uses back camera
+            fileName: "posm_$visitId.jpg",
+          ),
+        ),
+      );
+
+      if (result == null) return;
+
+      // Kompres hasil foto sebelum simpan/upload
+      final Directory dir = await getTemporaryDirectory();
+      final String targetPath = "${dir.path}/compressed_posm_$visitId.jpg";
+
+      // Pastikan file asli ada sebelum kompres
+      if (!await result.exists()) return;
+
+      final XFile? compressedXFile =
+          await FlutterImageCompress.compressAndGetFile(
+        result.path,
+        targetPath,
+        quality: 60,
+      );
+
+      setState(() {
+        _posmFotoFile = File(compressedXFile?.path ?? result.path);
+      });
+
+      debugPrint("✅ Foto POSM berhasil diambil & dikompres: ${_posmFotoFile!.path}");
+    } catch (e) {
+      debugPrint('Error ambil foto POSM: $e');
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Gagal ambil foto POSM: $e')),
+      );
+    }
+  }
+
   // ==================== FOTO: upload ke server ====================
   Future<String?> _uploadFoto(File foto) async {
     try {
-      // --- PERBAIKAN DI SINI ---
       final Uri uri = Uri.parse(ApiConfig.getUrl('/upload-selfie'));
       print("Proses Upload ke: $uri"); // Debugging
 
@@ -270,6 +318,36 @@ class _DetailFeatureChecklistScreenState
       }
     } catch (e) {
       debugPrint("❌ Error upload foto: $e");
+      return null;
+    }
+  }
+
+  Future<String?> _uploadFotoPosm(File foto) async {
+    try {
+      final Uri uri = Uri.parse(ApiConfig.getUrl('/upload-posm'));
+      print("Proses Upload POSM ke: $uri"); // Debugging
+
+      final request = http.MultipartRequest("POST", uri)
+        ..files.add(
+          await http.MultipartFile.fromPath(
+            "posm",
+            foto.path,
+            filename: "$visitId.jpg", // Menggunakan ID Visit sebagai nama file di folder posm
+          ),
+        );
+
+      final response = await request.send();
+      final respStr = await response.stream.bytesToString();
+
+      if (response.statusCode == 200) {
+        print("✅ Upload POSM Berhasil: $visitId.jpg");
+        return "$visitId.jpg";
+      } else {
+        debugPrint("❌ Upload POSM gagal: ${response.statusCode} - $respStr");
+        return null;
+      }
+    } catch (e) {
+      debugPrint("❌ Error upload foto POSM: $e");
       return null;
     }
   }
@@ -507,7 +585,9 @@ ${catatan.isEmpty ? '(tidak ada)' : catatan}
 ━━━━━━━━━━━━━━━━━━
 📍 <a href="https://www.google.com/maps?q=${latitude ?? ''},${longitude ?? ''}"><b>Cek Lokasi</b></a>
 ━━━━━━━━━━━━━━━━━━
-📸 <a href="${ApiConfig.getUrl('/photo/$visitId')}"><b>Cek Foto</b></a>
+📸 <a href="${ApiConfig.getUrl('/photo/$visitId')}"><b>Cek Foto Selfie</b></a>
+━━━━━━━━━━━━━━━━━━
+📸 <a href="${ApiConfig.getUrl('/posm/$visitId')}"><b>Cek Foto POSM</b></a>
 ━━━━━━━━━━━━━━━━━━
 """;
 
@@ -570,7 +650,9 @@ ${e.toString()}
 ━━━━━━━━━━━━━━━━━━
 📍 <a href="https://www.google.com/maps?q=${latitude ?? ''},${longitude ?? ''}"><b>Cek Lokasi</b></a>
 ━━━━━━━━━━━━━━━━━━
-📸 <a href="${ApiConfig.getUrl('/photo/$visitId')}"><b>Cek Foto</b></a>
+📸 <a href="${ApiConfig.getUrl('/photo/$visitId')}"><b>Cek Foto Selfie</b></a>
+━━━━━━━━━━━━━━━━━━
+📸 <a href="${ApiConfig.getUrl('/posm/$visitId')}"><b>Cek Foto POSM</b></a>
 ━━━━━━━━━━━━━━━━━━
 """;
 
@@ -890,6 +972,125 @@ ${e.toString()}
     );
   }
 
+  Widget _buildPhotoButton({
+    required String title,
+    required String subtitle,
+    required File? file,
+    required VoidCallback onTap,
+    required IconData icon,
+  }) {
+    return Expanded(
+      child: Container(
+        height: 110,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: file != null ? _UX.success : _UX.primary.withOpacity(0.3),
+            width: 1.5,
+          ),
+          color: file != null ? Colors.black.withOpacity(0.05) : _UX.primarySurface,
+          image: file != null
+              ? DecorationImage(
+                  image: FileImage(file),
+                  fit: BoxFit.cover,
+                  colorFilter: ColorFilter.mode(
+                    Colors.black.withOpacity(0.45),
+                    BlendMode.darken,
+                  ),
+                )
+              : null,
+        ),
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: onTap,
+            borderRadius: BorderRadius.circular(14),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 4.0, vertical: 8.0),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  if (file != null) ...[
+                    const Icon(
+                      Icons.check_circle,
+                      color: _UX.success,
+                      size: 24,
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 12,
+                        shadows: [
+                          Shadow(
+                            offset: Offset(0, 1),
+                            blurRadius: 3.0,
+                            color: Colors.black54,
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    const Text(
+                      'Ketuk untuk ubah',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: Colors.white70,
+                        fontSize: 9,
+                        shadows: [
+                          Shadow(
+                            offset: Offset(0, 1),
+                            blurRadius: 3.0,
+                            color: Colors.black54,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ] else ...[
+                    Icon(
+                      icon,
+                      color: _UX.primaryDark,
+                      size: 24,
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                        color: _UX.primaryDark,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 12,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      subtitle,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: _UX.primaryDark.withOpacity(0.7),
+                        fontSize: 9,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _submitBar() {
     return SafeArea(
       top: false,
@@ -898,61 +1099,115 @@ ${e.toString()}
         child: isSubmitting
             ? const SizedBox(
                 height: 52, child: Center(child: CircularProgressIndicator()))
-            : ElevatedButton.icon(
-                onPressed: () async {
-                  // ✅ Validasi: pastikan ada minimal satu checklist yang dicentang
-                  final hasChecked = _details.any(
-                    (detail) => detail.subDetails.any((sub) => sub.isChecked),
-                  );
+            : !_showPhotoButtons
+                ? ElevatedButton.icon(
+                    onPressed: () {
+                      final hasChecked = _details.any(
+                        (detail) => detail.subDetails.any((sub) => sub.isChecked),
+                      );
 
-                  if (!hasChecked) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content:
-                            Text('Anda belum mencentang checklist apa pun!'),
-                        backgroundColor: Colors.orange,
+                      if (!hasChecked) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content:
+                                Text('Anda belum mencentang checklist apa pun!'),
+                            backgroundColor: Colors.orange,
+                          ),
+                        );
+                        return;
+                      }
+
+                      setState(() {
+                        _showPhotoButtons = true;
+                      });
+                    },
+                    icon: const Icon(Icons.arrow_forward, color: Colors.white),
+                    label: const Text('LANJUTKAN'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: _UX.primaryDark,
+                      foregroundColor: Colors.white,
+                      minimumSize: const Size.fromHeight(52),
+                      textStyle: const TextStyle(
+                          fontSize: 16, fontWeight: FontWeight.w700),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(32),
                       ),
-                    );
-                    return; // hentikan proses submit
-                  }
+                      elevation: 2,
+                    ),
+                  )
+                : Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Row(
+                        children: [
+                          _buildPhotoButton(
+                            title: 'Selfie CO',
+                            subtitle: 'Ambil foto selfie',
+                            file: _fotoFile,
+                            onTap: _ambilFoto,
+                            icon: Icons.camera_front,
+                          ),
+                          const SizedBox(width: 12),
+                          _buildPhotoButton(
+                            title: 'Foto POSM',
+                            subtitle: 'Ambil foto POSM',
+                            file: _posmFotoFile,
+                            onTap: _ambilFotoPosm,
+                            icon: Icons.store,
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      ElevatedButton.icon(
+                        onPressed: (_fotoFile == null || _posmFotoFile == null)
+                            ? null
+                            : () async {
+                                setState(() {
+                                  isSubmitting = true;
+                                });
 
-                  // ambil foto
-                  await _ambilFoto();
-                  if (_fotoFile == null) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                          content: Text('Foto wajib diambil sebelum submit!')),
-                    );
-                    return;
-                  }
+                                final filename = await _uploadFoto(_fotoFile!);
+                                if (filename == null) {
+                                  setState(() {
+                                    isSubmitting = false;
+                                  });
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(content: Text('Upload foto selfie gagal!')),
+                                  );
+                                  return;
+                                }
 
-                  // upload foto
-                  final filename = await _uploadFoto(_fotoFile!);
-                  if (filename == null) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Upload foto gagal!')),
-                    );
-                    return;
-                  }
+                                final posmFilename = await _uploadFotoPosm(_posmFotoFile!);
+                                if (posmFilename == null) {
+                                  setState(() {
+                                    isSubmitting = false;
+                                  });
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(content: Text('Upload foto POSM gagal!')),
+                                  );
+                                  return;
+                                }
 
-                  // lanjut submit checklist (simpan lokal)
-                  await submitChecklist(filename);
-                },
-                icon:
-                    const Icon(Icons.check_circle_outline, color: Colors.white),
-                label: const Text('SELESAI'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: _UX.success,
-                  foregroundColor: Colors.white,
-                  minimumSize: const Size.fromHeight(52),
-                  textStyle: const TextStyle(
-                      fontSize: 16, fontWeight: FontWeight.w700),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(32),
+                                await submitChecklist(filename);
+                              },
+                        icon: const Icon(Icons.save, color: Colors.white),
+                        label: const Text('SIMPAN VISIT'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: _UX.success,
+                          foregroundColor: Colors.white,
+                          disabledBackgroundColor: Colors.grey,
+                          disabledForegroundColor: Colors.white70,
+                          minimumSize: const Size.fromHeight(52),
+                          textStyle: const TextStyle(
+                              fontSize: 16, fontWeight: FontWeight.w700),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(32),
+                          ),
+                          elevation: 2,
+                        ),
+                      ),
+                    ],
                   ),
-                  elevation: 2,
-                ),
-              ),
       ),
     );
   }
@@ -1019,7 +1274,7 @@ ${e.toString()}
                   SliverToBoxAdapter(
                       child: _sectionHeader('Catatan', icon: Icons.edit_note)),
                   SliverToBoxAdapter(child: _catatanField()),
-                  const SliverToBoxAdapter(child: SizedBox(height: 90)),
+                  SliverToBoxAdapter(child: SizedBox(height: _showPhotoButtons ? 160 : 90)),
                 ],
               ),
         bottomNavigationBar: _submitBar(),
@@ -1228,11 +1483,18 @@ class _HistoryCardState extends State<_HistoryCard> {
 }
 
 // ===============================================================
-// WIDGET: CustomCameraScreen — kamera depan & zoom terkunci
+// WIDGET: CustomCameraScreen — kamera depan & zoom terkunci (bisa back camera jika useFrontCamera = false)
 // ===============================================================
 class CustomCameraScreen extends StatefulWidget {
   final String visitId;
-  const CustomCameraScreen({Key? key, required this.visitId}) : super(key: key);
+  final bool useFrontCamera;
+  final String? fileName;
+  const CustomCameraScreen({
+    Key? key,
+    required this.visitId,
+    this.useFrontCamera = true,
+    this.fileName,
+  }) : super(key: key);
 
   @override
   State<CustomCameraScreen> createState() => _CustomCameraScreenState();
@@ -1252,12 +1514,21 @@ class _CustomCameraScreenState extends State<CustomCameraScreen> {
 
   Future<void> _initCamera() async {
     _cameras = await availableCameras();
-    final frontCamera = _cameras!.firstWhere(
-      (camera) => camera.lensDirection == CameraLensDirection.front,
-    );
+    
+    // Cari kamera sesuai permintaan, jika tidak ada pakai kamera pertama yang tersedia
+    CameraDescription selectedCamera;
+    try {
+      selectedCamera = _cameras!.firstWhere(
+        (camera) => camera.lensDirection == (widget.useFrontCamera 
+            ? CameraLensDirection.front 
+            : CameraLensDirection.back),
+      );
+    } catch (_) {
+      selectedCamera = _cameras!.first;
+    }
 
     _controller = CameraController(
-      frontCamera,
+      selectedCamera,
       ResolutionPreset.medium,
       enableAudio: false,
     );
@@ -1281,9 +1552,10 @@ class _CustomCameraScreenState extends State<CustomCameraScreen> {
       // Ambil foto → hasil berupa XFile
       final XFile photo = await _controller!.takePicture();
 
-      // Pindahkan ke direktori sementara dengan nama sesuai visitId
+      // Pindahkan ke direktori sementara dengan nama sesuai visitId / fileName
       final Directory tempDir = await getTemporaryDirectory();
-      final String filePath = '${tempDir.path}/${widget.visitId}.jpg';
+      final String name = widget.fileName ?? '${widget.visitId}.jpg';
+      final String filePath = '${tempDir.path}/$name';
       final File savedFile = await File(photo.path).copy(filePath);
 
       Navigator.pop(context, savedFile); // kirim hasil ke parent

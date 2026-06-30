@@ -5,10 +5,12 @@ import '../models/pelanggan_model.dart';
 import '../models/sales_model.dart';
 import '../models/feature_detail_model.dart';
 import '../models/feature_subdetail_model.dart';
+import '../models/posm_model.dart';
 import '../services/pelanggan_service.dart';
 import '../services/database_helper.dart';
 import '../services/submit_service.dart';
 import 'detail_feature_checklist_screen.dart';
+import 'posm_control_screen.dart';
 import 'dart:convert';
 
 // ======= Color & Style Tokens =======
@@ -332,6 +334,12 @@ class _PelangganListScreenState extends State<PelangganListScreen> {
 
         final details = detailMap.values.toList();
 
+        // Ambil data POSM Audit
+        final List<Map<String, dynamic>> posmRows =
+            await DatabaseHelper.instance.getPosmAuditByVisit(visitId);
+        final List<POSMAudit> posmDetails =
+            posmRows.map((r) => POSMAudit.fromMap(r)).toList();
+
         final success = await SubmitService.submitVisit(
           idVisit: visitId,
           tanggal: DateTime.parse(visit['tanggal']),
@@ -344,8 +352,11 @@ class _PelangganListScreenState extends State<PelangganListScreen> {
               ? DateTime.parse(visit['selesai'])
               : DateTime.now(),
           catatan: visit['catatan'] ?? '',
-          idFeature: details.isNotEmpty ? details[0].idFeature : '',
+          idFeature: details.isNotEmpty
+              ? details[0].idFeature
+              : (posmDetails.isNotEmpty ? widget.featureId : ''),
           details: details,
+          posmDetails: posmDetails,
           idSales: visit['idsales'].toString(),
           nocall: visit['nocall'],
         );
@@ -727,18 +738,31 @@ class _PelangganListScreenState extends State<PelangganListScreen> {
                                   if (lanjut != true) return;
                                 }
 
-                                await Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (_) =>
-                                        DetailFeatureChecklistScreen(
-                                      featureId: widget.featureId,
-                                      title: 'Checklist',
-                                      pelanggan: p,
-                                      featureType: widget.featureType,
+                                if (widget.title.toUpperCase().contains('POSM')) {
+                                  await Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (_) => POSMControlScreen(
+                                        featureId: widget.featureId,
+                                        title: widget.title,
+                                        pelanggan: p,
+                                      ),
                                     ),
-                                  ),
-                                );
+                                  );
+                                } else {
+                                  await Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (_) =>
+                                          DetailFeatureChecklistScreen(
+                                        featureId: widget.featureId,
+                                        title: 'Checklist',
+                                        pelanggan: p,
+                                        featureType: widget.featureType,
+                                      ),
+                                    ),
+                                  );
+                                }
 
                                 await loadVisitStatus(pelangganList);
                                 _applyFilters();

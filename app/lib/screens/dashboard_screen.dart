@@ -10,6 +10,7 @@ import '../models/feature_model.dart';
 import '../services/feature_service.dart';
 import '../services/sync_service.dart';
 import '../utils/api_config.dart';
+import '../services/database_helper.dart';
 import '../services/version_service.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'pelanggan_list_screen.dart';
@@ -106,21 +107,52 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   Future<List<Feature>> _loadFeaturesFiltered() async {
     try {
-      final all = await FeatureService().fetchFeatures();
-      final activeFeatureIds = await _getActiveFeatureIdsFromDb();
-
-      if (activeFeatureIds.isEmpty) {
-        return all;
+      // 1. Ambil dari API (dengan fallback ke Local DB)
+      List<Feature> all;
+      try {
+        all = await FeatureService().fetchFeatures();
+      } catch (e) {
+        all = await DatabaseHelper.instance.getAllFeature();
       }
 
-      final filtered =
-          all.where((f) => activeFeatureIds.contains(f.id)).toList();
-      return filtered.isEmpty ? all : filtered;
+      // 2. Ambil ID fitur yang aktif (punya pelanggan di DB lokal)
+      final activeFeatureIds = await _getActiveFeatureIdsFromDb();
+
+      List<Feature> baseList;
+      if (activeFeatureIds.isEmpty) {
+        // Jika belum ada pelanggan, tampilkan semua fitur yang tersedia
+        baseList = all;
+      } else {
+        // Jika sudah ada pelanggan, filter fitur yang memiliki data pelanggan
+        baseList = all.where((f) => activeFeatureIds.contains(f.id)).toList();
+      }
+
+      // 3. Inject POSM Distribution secara manual jika belum ada di list
+      // Pastikan menggunakan type 'report' agar diarahkan ke PelangganListScreen
+      if (!baseList.any((f) => f.nama.toUpperCase().contains('POSM'))) {
+        baseList.add(Feature(
+          id: 'posm_dist',
+          nama: 'POSM Distribution',
+          icon: 'report',
+          type: 'report', 
+        ));
+      }
+      
+      return baseList;
     } catch (e) {
       debugPrint('Gagal memfilter fitur: $e');
-      return FeatureService().fetchFeatures();
+      // Fallback terakhir: pastikan minimal ada menu POSM
+      return [
+        Feature(
+          id: 'posm_dist',
+          nama: 'POSM Distribution',
+          icon: 'report',
+          type: 'report',
+        )
+      ];
     }
   }
+
 
   Future<Set<String>> _getActiveFeatureIdsFromDb() async {
     final dbPath = p.join(await getDatabasesPath(), 'appdb.db');
